@@ -1,4 +1,21 @@
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
+const CURRENT_VERSION = "3.2";
+const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
+
+async function checkForUpdates() {
+  try {
+    const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
+    const data = await res.json();
+    if (data.version && data.version !== CURRENT_VERSION) {
+      const banner = document.getElementById("updateBanner");
+      banner.style.display = "block";
+      banner.textContent = `🔔 Update available! v${data.version} → Click to download`;
+      banner.onclick = () => window.open("https://github.com/Geresia/trip_scraper_extension/releases", "_blank");
+    }
+  } catch (e) {
+    console.log("Version check failed:", e.message);
+  }
+}
 
 function setStatus(msg, type = "") {
   const el = document.getElementById("status");
@@ -376,3 +393,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   // 팝업 닫힘 방지 - 결과 확인용 input 포커스
   document.getElementById("hotelId").focus();
 });
+
+// 팝업 열릴 때 버전 체크
+checkForUpdates();
