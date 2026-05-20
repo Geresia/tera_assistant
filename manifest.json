@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Trip.com Room Scraper",
+  "version": "3.2",
+  "description": "Trip.com 호텔 객실 자동 스캔 및 Google Sheets 전송",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.trip.com/*",
+    "https://*.trip.com/*",
+    "https://*.trip.com/*",
+    "https://script.google.com/*",
+    "https://*.tripcdn.com/*",
+    "https://*.c-ctrip.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.trip.com/hotels/*", "https://*.trip.com/hotels/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["jszip.min.js"],
+      "matches": ["https://www.trip.com/*"]
+    }
+  ]
+}
