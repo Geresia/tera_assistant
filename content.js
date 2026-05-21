@@ -274,7 +274,7 @@ if (!window.__scrapeRoomsLoaded) {
     for (var btn of showMoreBtns) {
       if (/show.*remaining|more room/i.test(btn.innerText)) {
         btn.click();
-        await new Promise(function(r) { setTimeout(r, 1500); });
+        await new Promise(function(r) { setTimeout(r, 3000); });
         // 새로 생긴 버튼도 확인
         showMoreBtns = [...document.querySelectorAll('[class*="mainRoomList-foldButton"]')];
       }
