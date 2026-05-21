@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Trip.com Room Scraper",
-  "version": "3.3",
+  "version": "3.31",
   "description": "Trip.com 호텔 객실 자동 스캔 및 Google Sheets 전송",
   "permissions": [
     "tabs",
