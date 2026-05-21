@@ -1,3 +1,67 @@
+const STRINGS = {
+  kr: {
+    startBtn: "스캔 시작 (1차 + +3일 + +7일)",
+    hotelNamePlaceholder: "호텔 이름 입력 (사진용)",
+    defaultStatus: "Trip.com 호텔 페이지에서 실행하세요.",
+    noHotelId: "Hotel ID를 입력하세요.",
+    notTripPage: "Trip.com 호텔 페이지에서 실행하세요.",
+    scan1: "1차 스캔 중 (현재 날짜)...",
+    scan1done: (rooms, total, photos) => `1차 완료: ${rooms}개 → 누적 ${total}개 | 호텔사진: ${photos}장`,
+    scan2: "2차 스캔 중 (+3일)...",
+    scan2done: (rooms, total) => `2차 완료: ${rooms}개 → 누적 ${total}개`,
+    scan3: "3차 스캔 중 (+7일)...",
+    scan3done: (rooms, total) => `3차 완료: ${rooms}개 → 누적 ${total}개`,
+    noRooms: "객실을 찾지 못했습니다.",
+    sending: "전송 중...",
+    sent: (n) => `✅ 전송 완료! 총 ${n}개 객실`,
+    zipping: "사진 ZIP 생성 중...",
+    done: (rooms, photos) => `✅ 완료! 객실 ${rooms}개 + 사진 ${photos}장`,
+    noPhotos: (n) => `✅ 전송 완료! 총 ${n}개 객실 (사진 없음)`,
+    noJszip: (n) => `✅ 전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
+    update: (v) => `🔔 업데이트 있어요! v${v} → 클릭해서 다운로드`,
+  },
+  en: {
+    startBtn: "Start Scan (Day 1 + +3 days + +7 days)",
+    hotelNamePlaceholder: "Enter Hotel Name (for photos)",
+    defaultStatus: "Run this on a Trip.com hotel page.",
+    noHotelId: "Please enter Hotel ID.",
+    notTripPage: "Please run this on a Trip.com hotel page.",
+    scan1: "Scanning (Current date)...",
+    scan1done: (rooms, total, photos) => `Scan 1 done: ${rooms} rooms → Total ${total} | Hotel photos: ${photos}`,
+    scan2: "Scanning (+3 days)...",
+    scan2done: (rooms, total) => `Scan 2 done: ${rooms} rooms → Total ${total}`,
+    scan3: "Scanning (+7 days)...",
+    scan3done: (rooms, total) => `Scan 3 done: ${rooms} rooms → Total ${total}`,
+    noRooms: "No rooms found.",
+    sending: "Sending...",
+    sent: (n) => `✅ Sent! Total ${n} rooms`,
+    zipping: "Creating photo ZIP...",
+    done: (rooms, photos) => `✅ Done! ${rooms} rooms + ${photos} photos`,
+    noPhotos: (n) => `✅ Sent! ${n} rooms (no photos)`,
+    noJszip: (n) => `✅ Sent! ${n} rooms (JSZip missing)`,
+    update: (v) => `🔔 Update available! v${v} → Click to download`,
+  }
+};
+
+let currentLang = localStorage.getItem('scraperLang') || 'kr';
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('scraperLang', lang);
+  document.getElementById('btnKR').className = 'lang-btn' + (lang === 'kr' ? ' active' : '');
+  document.getElementById('btnEN').className = 'lang-btn' + (lang === 'en' ? ' active' : '');
+  document.getElementById('startBtn').textContent = STRINGS[lang].startBtn;
+  document.getElementById('hotelName').placeholder = STRINGS[lang].hotelNamePlaceholder;
+  document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
+  // 배너도 언어에 맞게 업데이트
+  const banner = document.getElementById('updateBanner');
+  if (banner.dataset.version) {
+    banner.textContent = STRINGS[lang].update(banner.dataset.version);
+  }
+}
+
+function t() { return STRINGS[currentLang]; }
+
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
 const CURRENT_VERSION = "3.2";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
@@ -9,7 +73,8 @@ async function checkForUpdates() {
     if (data.version && data.version !== CURRENT_VERSION) {
       const banner = document.getElementById("updateBanner");
       banner.style.display = "block";
-      banner.textContent = `🔔 Update available! v${data.version} → Click to download`;
+      banner.dataset.version = data.version;
+      banner.textContent = t().update(data.version);
       banner.onclick = () => window.open("https://github.com/Geresia/trip_scraper_extension/releases", "_blank");
     }
   } catch (e) {
@@ -198,7 +263,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   const hotelName = document.getElementById("hotelName").value.trim() || hotelId;
 
   if (!hotelId) {
-    setStatus("Hotel ID를 입력하세요.", "error");
+    setStatus(t().noHotelId, "error");
     return;
   }
 
@@ -211,7 +276,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const baseUrl = currentTab.url;
 
     if (!baseUrl.includes("trip.com/hotels")) {
-      setStatus("Trip.com 호텔 페이지에서 실행하세요.", "error");
+      setStatus(t().notTripPage, "error");
       btn.disabled = false;
       return;
     }
@@ -219,16 +284,16 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const allRooms = new Map();
 
     // 1차 스캔
-    setStatus("1차 스캔 중 (현재 날짜)...");
+    setStatus(t().scan1);
     const result1 = await scrapeTab(currentTab.id, true);
     const hotelPhotos = result1.hotelPhotos || [];
     (result1.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
-    setStatus(`1차 완료: ${(result1.rooms||[]).length}개 → 누적 ${allRooms.size}개 | 호텔사진: ${hotelPhotos.length}장`);
+    setStatus(t().scan1done((result1.rooms||[]).length, allRooms.size, hotelPhotos.length));
 
     // 2차 스캔 (+3일)
     const url2 = getDateOffsetUrl(baseUrl, 3);
     if (url2) {
-      setStatus("2차 스캔 중 (+3일)...");
+      setStatus(t().scan2);
       const tab2 = await chrome.tabs.create({ url: url2, active: false });
       openedTabs.push(tab2.id);
       await waitForTabLoad(tab2.id);
@@ -242,13 +307,13 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           allRooms.set(r.roomName, existing);
         }
       });
-      setStatus(`2차 완료: ${(result2.rooms||[]).length}개 → 누적 ${allRooms.size}개`);
+      setStatus(t().scan2done((result2.rooms||[]).length, allRooms.size));
     }
 
     // 3차 스캔 (+7일)
     const url3 = getDateOffsetUrl(baseUrl, 7);
     if (url3) {
-      setStatus("3차 스캔 중 (+7일)...");
+      setStatus(t().scan3);
       const tab3 = await chrome.tabs.create({ url: url3, active: false });
       openedTabs.push(tab3.id);
       await waitForTabLoad(tab3.id);
@@ -261,19 +326,19 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           allRooms.set(r.roomName, existing);
         }
       });
-      setStatus(`3차 완료: ${(result3.rooms||[]).length}개 → 누적 ${allRooms.size}개`);
+      setStatus(t().scan3done((result3.rooms||[]).length, allRooms.size));
     }
 
     const finalRooms = [...allRooms.values()];
 
     if (finalRooms.length === 0) {
-      setStatus("객실을 찾지 못했습니다.", "error");
+      setStatus(t().noRooms, "error");
       btn.disabled = false;
       return;
     }
 
     // Google Sheets 전송
-    setStatus("전송 중...");
+    setStatus(t().sending);
     await fetch(WEB_APP_URL, {
       method: "POST",
       mode: "no-cors",
@@ -287,11 +352,11 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       })
     });
 
-    setStatus(`✅ 전송 완료! 총 ${finalRooms.length}개 객실`, "success");
+    setStatus(t().sent(finalRooms.length), "success");
 
     // 사진 ZIP 생성
     if (typeof JSZip !== "undefined") {
-      setStatus("사진 ZIP 생성 중...");
+      setStatus(t().zipping);
       const zip = new JSZip();
       const hotelFolder = zip.folder(sanitizeName(hotelName));
       const usedHotelUrls = new Set(); // 호텔 전체 사진 중복 제거용
@@ -326,7 +391,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
             idx++;
             photoCount++;
           } catch (e) {
-            console.log("사진 fetch 실패:", url);
+            console.log("Photo fetch failed:", url);
           }
         }
       }
@@ -357,7 +422,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
             hidx++;
             photoCount++;
           } catch (e) {
-            console.log("호텔 사진 fetch 실패:", url);
+            console.log("Hotel photo fetch failed:", url);
           }
         }
       }
@@ -370,12 +435,12 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         a.download = `${sanitizeName(hotelName)}_photos.zip`;
         a.click();
         URL.revokeObjectURL(zipUrl);
-        setStatus(`✅ 완료! 객실 ${finalRooms.length}개 + 사진 ${photoCount}장`, "success");
+        setStatus(t().done(finalRooms.length, photoCount), "success");
       } else {
-        setStatus(`✅ 전송 완료! 총 ${finalRooms.length}개 객실 (사진 없음)`, "success");
+        setStatus(t().noPhotos(finalRooms.length), "success");
       }
     } else {
-      setStatus(`✅ 전송 완료! 총 ${finalRooms.length}개 객실 (JSZip 없음)`, "success");
+      setStatus(t().noJszip(finalRooms.length), "success");
     }
 
     // ZIP 완료 후 탭 앞으로 꺼내기
@@ -393,6 +458,11 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   // 팝업 닫힘 방지 - 결과 확인용 input 포커스
   document.getElementById("hotelId").focus();
 });
+
+// 팝업 초기화
+setLang(currentLang);
+document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
+document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
 
 // 팝업 열릴 때 버전 체크
 checkForUpdates();
