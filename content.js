@@ -269,6 +269,17 @@ if (!window.__scrapeRoomsLoaded) {
 
   // includeHotelPhotos: true일 때만 호텔 전체 사진 수집 (1차 스캔만)
   window.__scrapeRooms = async function(includeHotelPhotos) {
+    // "Show X Remaining Room Types" 버튼 있으면 클릭해서 숨겨진 방 노출
+    var showMoreBtns = [...document.querySelectorAll('[class*="mainRoomList-foldButton"]')];
+    for (var btn of showMoreBtns) {
+      if (/show.*remaining|more room/i.test(btn.innerText)) {
+        btn.click();
+        await new Promise(function(r) { setTimeout(r, 1500); });
+        // 새로 생긴 버튼도 확인
+        showMoreBtns = [...document.querySelectorAll('[class*="mainRoomList-foldButton"]')];
+      }
+    }
+
     // commonRoomCard__ 로 시작하는 부모 카드만 선택 (title, content 자식 제외)
     var cards = [...document.querySelectorAll('[class*="commonRoomCard"]')].filter(function(el) {
       return /commonRoomCard__/.test(el.className);
