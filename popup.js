@@ -143,7 +143,7 @@ async function scrapeTab(tabId, includeHotelPhotos = false) {
   });
 
   // window 변수 폴링 (최대 120초)
-  for (let i = 0; i < 240; i++) {
+  for (let i = 0; i < 600; i++) {
     await new Promise(r => setTimeout(r, 500));
     const results = await chrome.scripting.executeScript({
       target: { tabId },
