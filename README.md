@@ -36,6 +36,7 @@ A Chrome Extension that automatically scrapes hotel room data from Trip.com and 
 
 ## Version History
 
+- **3.3** - Added language toggle (KR/EN) and auto-expand hidden room types (Show Remaining Room Types)
 - **3.2** - Fixed isolated world issue for reliable photo scraping
 - **3.1** - Added hotel photo collection and canvas upscaling
 - **3.0** - Added ZIP photo download feature
