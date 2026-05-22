@@ -134,6 +134,10 @@ if (!window.__scrapeRoomsLoaded) {
   };
 
   window.__processCard = async function(card) {
+    // 카드 위치로 스크롤해서 lazy loading 트리거
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await new Promise(function(r) { setTimeout(r, 1500); });
+
     var titleEl = card.querySelector('span[class*="commonRoomCard-title"]');
     if (!titleEl) return null;
     var rawTitle = titleEl.getAttribute('aria-label') || titleEl.innerText.trim();
@@ -169,7 +173,7 @@ if (!window.__scrapeRoomsLoaded) {
       var firstGalleryImg = document.querySelector('[class*="galleryBox-photo_img"]');
       if (firstGalleryImg) {
         firstGalleryImg.click();
-        await new Promise(function(r) { setTimeout(r, 800); });
+        await new Promise(function(r) { setTimeout(r, 1500); });
 
         // 오른쪽 화살표로 끝까지 수집 (처음부터 끝까지)
         roomPhotos = await window.__collectPhotosViaArrow(1, 0);
@@ -214,9 +218,12 @@ if (!window.__scrapeRoomsLoaded) {
     }
 
     function getCurrentImg() {
-      // ?proc=watermark 가 붙은 고화질 뷰어 이미지만 잡기
+      // imagePreview-bigImage-img 클래스로 직접 잡기
+      var bigImg = document.querySelector('[class*="imagePreview-bigImage-img"]');
+      if (bigImg && bigImg.src && bigImg.src.includes('tripcdn')) return bigImg.src;
+      // fallback: proc=watermark 또는 digimark URL
       var imgs = [...document.querySelectorAll('img')].filter(function(i) {
-        return i.src.includes('tripcdn') && i.src.includes('proc=watermark') && i.naturalWidth > 400;
+        return i.src.includes('tripcdn') && (i.src.includes('proc=watermark') || i.src.includes('digimark')) && i.naturalWidth > 400;
       });
       if (imgs.length) return imgs[0].src;
       // fallback: 가장 큰 이미지
