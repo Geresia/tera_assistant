@@ -89,19 +89,48 @@ function setStatus(msg, type = "") {
   console.log("[Scraper]", msg);
 }
 
-function getDateOffsetUrl(baseUrl, offsetDays) {
+async function getDateOffsetUrl(baseUrl, offsetDays) {
   const fmt = d =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
   const checkInMatch = baseUrl.match(/checkIn=([\d-]+)/i);
-  if (!checkInMatch) return null;
-  const base = new Date(checkInMatch[1]);
+  let base;
+  if (checkInMatch) {
+    base = new Date(checkInMatch[1]);
+  } else {
+    // URL에 날짜 없으면 페이지의 checkInInput에서 읽기
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: (await chrome.tabs.query({ active: true, currentWindow: true }))[0].id },
+        world: "MAIN",
+        func: () => {
+          const el = document.querySelector('#checkInInput');
+          return el ? el.value : null;
+        }
+      });
+      const dateStr = results?.[0]?.result;
+      base = dateStr ? new Date(dateStr + ' ' + new Date().getFullYear()) : new Date();
+    } catch (e) {
+      base = new Date();
+    }
+  }
+
   const newCheckIn = new Date(base);
   newCheckIn.setDate(base.getDate() + offsetDays);
   const newCheckOut = new Date(newCheckIn);
   newCheckOut.setDate(newCheckIn.getDate() + 1);
-  return baseUrl
-    .replace(/checkIn=[\d-]+/i, `checkIn=${fmt(newCheckIn)}`)
-    .replace(/checkOut=[\d-]+/i, `checkOut=${fmt(newCheckOut)}`);
+
+  // checkIn/checkOut 파라미터가 있으면 교체, 없으면 추가
+  let url = baseUrl;
+  if (checkInMatch) {
+    url = url
+      .replace(/checkIn=[\d-]+/i, `checkIn=${fmt(newCheckIn)}`)
+      .replace(/checkOut=[\d-]+/i, `checkOut=${fmt(newCheckOut)}`);
+  } else {
+    const sep = url.includes('?') ? '&' : '?';
+    url = `${url}${sep}checkIn=${fmt(newCheckIn)}&checkOut=${fmt(newCheckOut)}&adult=2&children=0`;
+  }
+  return url;
 }
 
 function waitForTabLoad(tabId) {
@@ -291,7 +320,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     setStatus(t().scan1done((result1.rooms||[]).length, allRooms.size, hotelPhotos.length));
 
     // 2차 스캔 (+3일)
-    const url2 = getDateOffsetUrl(baseUrl, 3);
+    const url2 = await getDateOffsetUrl(baseUrl, 3);
     if (url2) {
       setStatus(t().scan2);
       const tab2 = await chrome.tabs.create({ url: url2, active: false });
@@ -311,7 +340,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     }
 
     // 3차 스캔 (+7일)
-    const url3 = getDateOffsetUrl(baseUrl, 7);
+    const url3 = await getDateOffsetUrl(baseUrl, 7);
     if (url3) {
       setStatus(t().scan3);
       const tab3 = await chrome.tabs.create({ url: url3, active: false });
