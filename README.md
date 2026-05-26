@@ -8,6 +8,7 @@ A Chrome Extension that automatically scrapes hotel room data from Trip.com and 
 2. Enable **Developer mode** (top right toggle)
 3. Click **Load unpacked**
 4. Select the `trip-scraper-extension` folder
+5. Contact Sangjae Lee to get access to the Google Sheet
 
 ## How to Use
 
