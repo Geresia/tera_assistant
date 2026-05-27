@@ -29,7 +29,7 @@ A Chrome Extension that automatically scrapes hotel room data from Trip.com and 
 ## File Structure
 
 - `manifest.json` - Extension configuration
-- `popup.html` / `popup.js` — Extension popup UI and scan flow
+- `popup.html` / `popup.js` - Extension popup UI and scan flow
 - `content.js` - Fetches room and hotel data via Trip.com API
 - `background.js` - Service Worker (required for Manifest V3)
 - `jszip.min.js` - Library for creating ZIP files
