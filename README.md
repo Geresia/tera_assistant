@@ -49,7 +49,7 @@ A Chrome Extension that automatically scrapes hotel room data from Trip.com and 
 ## Version History
 
 - **4.0** - Migrated room scraping and hotel photos to Trip.com API (`physicRoomMap` + `getHotelDetailAggregate`). Removed DOM-based scraping and multi-date scanning (+3/+7 days). Now works on all regional Trip.com domains via `window.location.origin`. Removed `content_scripts` from manifest to prevent auto-execution on page load.
-- **3.3** - Added language toggle (KR/EN) and auto-expand hidden room types (Show Remaining Room Types). Auto-detect check-in date from page when URL has no date parameter.
+- **3.3** - Added language toggle (KR/EN) and auto expand hidden room types (Show Remaining Room Types). Auto detect check in date from page when URL has no date parameter.
 - **3.2** - Fixed isolated world issue for reliable photo scraping
 - **3.1** - Added hotel photo collection and canvas upscaling
 - **3.0** - Added ZIP photo download feature
