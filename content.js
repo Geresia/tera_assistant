@@ -20,7 +20,10 @@ if (!window.__scrapeRoomsLoaded) {
     { keywords: ["balcony", "terrace", "발코니", "테라스"], code: "BALCONY_TERRACE" },
     { keywords: ["connecting room", "interconnecting", "커넥팅"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
     { keywords: ["shared bathroom", "공용 욕실"], code: "SHARED_BATHROOM" },
-    { keywords: ["hot water", "heated water", "온수"], code: "HEATED_WATER" }
+    { keywords: ["hot water", "heated water", "온수"], code: "HEATED_WATER" },
+    { keywords: ["slippers", "슬리퍼"], code: "SLIPPERS" },
+    { keywords: ["safe", "금고"], code: "SAFE" },
+    { keywords: ["telephone", "전화"], code: "TELEPHONE" },
   ];
 
   window.__extractFacilities = function(texts) {
@@ -34,279 +37,187 @@ if (!window.__scrapeRoomsLoaded) {
     return result.join(", ");
   };
 
-  window.__extractOccupancy = function(card) {
-    var firstGuestBox = card.querySelector('[class*="guestInfoBox"]');
-    if (!firstGuestBox) return 0;
-    var adultDesc = firstGuestBox.querySelector('[class*="adultDesc"]');
-    if (adultDesc) {
-      var match = adultDesc.innerText.match(/\d+/);
-      return match ? Number(match[0]) : 0;
+  // URL에서 hotelId, cityId 추출
+  window.__parseUrlParams = function() {
+    var url = window.location.href;
+    var hotelIdMatch = url.match(/hotelId=(\d+)/i) || url.match(/hotel-detail-(\d+)/i);
+    var cityIdMatch = url.match(/cityId=(\d+)/i);
+    var checkInMatch = url.match(/checkIn=([\d-]+)/i);
+
+    var hotelId = hotelIdMatch ? Number(hotelIdMatch[1]) : 0;
+    var cityId = cityIdMatch ? Number(cityIdMatch[1]) : 0;
+
+    if (!hotelId) {
+      var metaEl = document.querySelector('meta[name="hotel_id"]') || document.querySelector('[data-hotel-id]');
+      if (metaEl) hotelId = Number(metaEl.getAttribute('content') || metaEl.getAttribute('data-hotel-id'));
     }
-    return firstGuestBox.querySelectorAll('[class*="adultIcon"]').length;
+
+    var checkIn;
+    if (checkInMatch) {
+      checkIn = checkInMatch[1].replace(/-/g, '');
+    } else {
+      var d = new Date();
+      d.setDate(d.getDate() + 1);
+      checkIn = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+    }
+    var checkInDate = new Date(checkIn.slice(0,4)+'-'+checkIn.slice(4,6)+'-'+checkIn.slice(6,8));
+    var checkOutDate = new Date(checkInDate);
+    checkOutDate.setDate(checkInDate.getDate() + 1);
+    var checkOut = checkOutDate.getFullYear() + String(checkOutDate.getMonth()+1).padStart(2,'0') + String(checkOutDate.getDate()).padStart(2,'0');
+
+    return { hotelId, cityId, checkIn, checkOut };
   };
 
-  window.__extractRoomView = function(card) {
-    var facilityEls = [...card.querySelectorAll('span[class*="baseRoom-facility_title"]')];
-    var viewFacility = facilityEls.find(function(el) { return /view/i.test(el.innerText); });
-    return viewFacility ? viewFacility.innerText.trim() : "";
-  };
+  // physicRoomMap → rooms 배열로 변환
+  window.__parsePhysicRoomMap = function(physicRoomMap) {
+    var rooms = [];
+    Object.keys(physicRoomMap).forEach(function(roomId) {
+      var room = physicRoomMap[roomId];
+      var roomName = room.name || "";
+      if (!roomName) return;
 
-  // 현재 imagePreview에서 보이는 큰 이미지 URL 추출
-  window.__getCurrentPreviewImg = function() {
-    var img = document.querySelector('[class*="imagePreview"] img, [class*="imgPreview"] img, [class*="bigAlbum"] img');
-    return img ? (img.src || "") : "";
-  };
-
-  // 오른쪽 화살표 클릭하면서 사진 수집
-  // startFromIndex: 이 인덱스부터 저장 (1-based), 0이면 처음부터
-  // maxIndex: 이 인덱스까지만 저장 (0이면 끝까지)
-  window.__collectPhotosViaArrow = async function(startFromIndex, maxIndex) {
-    var photos = [];
-    var seen = new Set();
-    var maxWait = 200; // 최대 대기 루프
-
-    // 현재 인덱스 파악
-    function getCurrentIndex() {
-      var idxEl = document.querySelector('[class*="imgIndex"]');
-      if (!idxEl) return 1;
-      var match = idxEl.innerText.match(/^(\d+)/);
-      return match ? Number(match[1]) : 1;
-    }
-
-    // 현재 큰 이미지 URL
-    function getCurrentImg() {
-      var img = document.querySelector(
-        '[class*="imagePreview"] img:not([class*="arrow"]), [class*="imgPreview"] img, [class*="bigImg"] img, [class*="mainImg"] img'
-      );
-      if (!img) {
-        // fallback: 가장 큰 img
-        var imgs = [...document.querySelectorAll('[class*="imagePreview"] img, [class*="bigAlbum"] img')];
-        img = imgs.find(function(i) { return i.naturalWidth > 200; });
-      }
-      return img ? img.src : "";
-    }
-
-    // 오른쪽 화살표
-    function getRightArrow() {
-      return document.querySelector('[class*="imagePreview-arrow_right"]');
-    }
-
-    var currentIdx = getCurrentIndex();
-
-    // startFromIndex까지 오른쪽으로 이동
-    if (startFromIndex > 1) {
-      var attempts = 0;
-      while (getCurrentIndex() < startFromIndex && attempts < 200) {
-        var arrow = getRightArrow();
-        if (!arrow) break;
-        arrow.click();
-        await new Promise(function(r) { setTimeout(r, 300); });
-        attempts++;
-      }
-    }
-
-    // 사진 수집
-    for (var i = 0; i < maxWait; i++) {
-      currentIdx = getCurrentIndex();
-
-      // maxIndex 초과하면 종료
-      if (maxIndex > 0 && currentIdx > maxIndex) break;
-
-      var url = getCurrentImg();
-      if (url && !seen.has(url)) {
-        seen.add(url);
-        photos.push(url);
+      var roomPhotos = [];
+      if (room.pictureInfo && room.pictureInfo.length) {
+        room.pictureInfo.forEach(function(pic) {
+          if (pic.url) roomPhotos.push(pic.url);
+        });
       }
 
-      // 오른쪽 화살표 클릭
-      var rightArrow = getRightArrow();
-      if (!rightArrow) break; // 마지막 사진
+      var facilityTexts = [];
+      if (room.faciltityInfo && room.faciltityInfo.list) {
+        room.faciltityInfo.list.forEach(function(cat) {
+          if (cat.subList) {
+            cat.subList.forEach(function(item) {
+              if (item.title) facilityTexts.push(item.title);
+            });
+          }
+        });
+      }
+      var facilityStr = window.__extractFacilities(facilityTexts);
 
-      rightArrow.click();
-      await new Promise(function(r) { setTimeout(r, 600); });
+      var bedText = (room.bedInfo && room.bedInfo.title) ? room.bedInfo.title : "";
+      var sizeText = (room.areaInfo && room.areaInfo.title) ? room.areaInfo.title : "";
 
-      // 다음 인덱스 확인
-      var nextIdx = getCurrentIndex();
-      if (nextIdx === currentIdx) break; // 인덱스 변화 없으면 종료
-    }
-
-    return photos;
-  };
-
-  window.__processCard = async function(card) {
-    // 카드 위치로 스크롤해서 lazy loading 트리거
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await new Promise(function(r) { setTimeout(r, 1500); });
-
-    var titleEl = card.querySelector('span[class*="commonRoomCard-title"]');
-    if (!titleEl) return null;
-    var rawTitle = titleEl.getAttribute('aria-label') || titleEl.innerText.trim();
-    var roomName = rawTitle.replace(/★.*?★/g, '').trim();
-    if (!roomName) return null;
-
-    var bedEl = card.querySelector('span[class*="baseRoom-bedsInfo_title"]');
-    var bedText = bedEl ? bedEl.innerText.trim() : "";
-
-    var facilityEls = [...card.querySelectorAll('span[class*="baseRoom-facility_title"]')];
-    var basicFacilities = facilityEls.map(function(el) { return el.innerText.trim(); });
-
-    var sizeText = basicFacilities.find(function(f) { return /㎡|sqm/i.test(f); }) || "";
-    var smoking = basicFacilities.some(function(f) { return /금연|non-smoking|non smoking|no smoking/i.test(f); }) ? "NO"
-      : basicFacilities.some(function(f) { return /흡연/i.test(f) || (f.toLowerCase().includes("smoking") && !f.toLowerCase().includes("non")); }) ? "YES" : "";
-    var occupancy = window.__extractOccupancy(card);
-    var roomView = window.__extractRoomView(card);
-
-    var detailBtn = card.querySelector('[data-test-id="baseRoom-roomAmenities"]');
-    var facilityStr = window.__extractFacilities(basicFacilities);
-    var roomPhotos = [];
-
-    if (detailBtn) {
-      detailBtn.click();
-      await new Promise(function(r) { setTimeout(r, 2500); });
-
-      // facilities 긁기
-      var detailItems = [...document.querySelectorAll('[class*="baseRoomLayer-facilityItem"]')];
-      var detailTexts = detailItems.map(function(el) { return el.innerText.trim(); }).filter(Boolean);
-      facilityStr = window.__extractFacilities(detailTexts);
-
-      // galleryBox 첫 번째 사진 클릭해서 큰 이미지 뷰어 열기
-      var firstGalleryImg = document.querySelector('[class*="galleryBox-photo_img"]');
-      if (firstGalleryImg) {
-        firstGalleryImg.click();
-        await new Promise(function(r) { setTimeout(r, 1500); });
-
-        // 오른쪽 화살표로 끝까지 수집 (처음부터 끝까지)
-        roomPhotos = await window.__collectPhotosViaArrow(1, 0);
-
-        // imagePreview 닫기
-        var previewClose = document.querySelector('[class*="imagePreview"] [class*="close"], [class*="imgPreview"] [class*="close"]');
-        if (previewClose) {
-          previewClose.click();
-          await new Promise(function(r) { setTimeout(r, 600); });
-        }
+      var smoking = "";
+      if (room.smokeInfo && room.smokeInfo.title) {
+        var s = room.smokeInfo.title.toLowerCase();
+        if (s.includes("non")) smoking = "NO";
+        else if (s.includes("smoking")) smoking = "YES";
       }
 
-      // baseRoomLayer 닫기
-      var closeBtn = document.querySelector('[class*="baseRoomLayer"] [class*="close"],[class*="bigAlbum"] button[class*="close"],[class*="popup"] [class*="close"]');
-      if (closeBtn) closeBtn.click();
-      await new Promise(function(r) { setTimeout(r, 500); });
-    }
-
-    return { roomName, bedText, sizeText, smoking, facilityStr, occupancy, roomView, roomPhotos };
-  };
-
-  // 호텔 전체 사진 수집 (11번째부터 끝까지 화살표로 이동)
-  window.__scrapeHotelPhotos = async function() {
-    // 1단계: See All Photos 버튼 클릭
-    var showAllBtn = document.querySelector('[class*="headAlbum_headAlbum-showmore"]');
-    if (!showAllBtn) return [];
-    showAllBtn.click();
-    await new Promise(function(r) { setTimeout(r, 3000); });
-
-    // 2단계: waterfallImg 첫번째(index 0) 클릭 → 큰 뷰어 열기
-    var allImgs = [...document.querySelectorAll('[class*="waterfallImg"]')];
-    if (allImgs.length < 1) return [];
-    allImgs[0].click();
-    await new Promise(function(r) { setTimeout(r, 1000); });
-
-    // 3단계: imgIndex 확인
-    function getCurrentIndex() {
-      var idxEl = document.querySelector('[class*="imgIndex"]');
-      if (!idxEl) return 0;
-      var match = idxEl.innerText.match(/^(\d+)/);
-      return match ? Number(match[1]) : 0;
-    }
-
-    function getCurrentImg() {
-      // imagePreview-bigImage-img 클래스로 직접 잡기
-      var bigImg = document.querySelector('[class*="imagePreview-bigImage-img"]');
-      if (bigImg && bigImg.src && bigImg.src.includes('tripcdn')) return bigImg.src;
-      // fallback: proc=watermark 또는 digimark URL
-      var imgs = [...document.querySelectorAll('img')].filter(function(i) {
-        return i.src.includes('tripcdn') && (i.src.includes('proc=watermark') || i.src.includes('digimark')) && i.naturalWidth > 400;
-      });
-      if (imgs.length) return imgs[0].src;
-      // fallback: 가장 큰 이미지
-      var allImgs = [...document.querySelectorAll('img')].filter(function(i) {
-        return i.naturalWidth >= 1000 && i.src.includes('tripcdn');
-      });
-      allImgs.sort(function(a, b) { return b.naturalWidth - a.naturalWidth; });
-      return allImgs.length ? allImgs[0].src : "";
-    }
-
-    function getRightArrow() {
-      return document.querySelector('[class*="imagePreview-arrow_right"]');
-    }
-
-    // 4단계: 오른쪽 화살표로 10번째까지 수집
-    var photos = [];
-    var seen = new Set();
-    var maxWait = 500;
-
-    for (var i = 0; i < maxWait; i++) {
-      var currentIdx = getCurrentIndex();
-
-      // 10번째 초과하면 종료
-      if (currentIdx > 10) break;
-
-      var url = getCurrentImg();
-
-      if (url && !seen.has(url)) {
-        seen.add(url);
-        photos.push(url);
+      var roomView = "";
+      if (room.windowInfo && room.windowInfo.title) {
+        var t = room.windowInfo.title.toLowerCase();
+        if (t.includes("sea") || t.includes("ocean")) roomView = "SEA_VIEW";
+        else if (t.includes("city")) roomView = "CITY_VIEW";
+        else if (t.includes("mountain")) roomView = "MOUNTAIN_VIEW";
+        else if (t.includes("garden")) roomView = "GARDEN_VIEW";
+        else if (t.includes("pool")) roomView = "POOL_VIEW";
+        else if (t.includes("river")) roomView = "RIVER_VIEW";
+        else if (t.includes("park")) roomView = "PARK_VIEW";
+        else if (t.includes("lake")) roomView = "LAKE_VIEW";
       }
 
-      var rightArrow = getRightArrow();
-      if (!rightArrow) break;
+      var occupancy = 2;
 
-      rightArrow.click();
-      await new Promise(function(r) { setTimeout(r, 600); });
-
-      var nextIdx = getCurrentIndex();
-      if (nextIdx === currentIdx) break;
-    }
-
-    // 닫기
-    var closeBtn = document.querySelector('[class*="imagePreview"] [class*="close"], [class*="bigAlbum"] [class*="close"]');
-    if (closeBtn) closeBtn.click();
-    await new Promise(function(r) { setTimeout(r, 500); });
-
-    return photos;
-  };
-
-  // includeHotelPhotos: true일 때만 호텔 전체 사진 수집 (1차 스캔만)
-  window.__scrapeRooms = async function(includeHotelPhotos) {
-    // "Show X Remaining Room Types" 버튼 있으면 클릭해서 숨겨진 방 노출
-    var showMoreBtns = [...document.querySelectorAll('[class*="mainRoomList-foldButton"]')];
-    for (var btn of showMoreBtns) {
-      if (/show.*remaining|more room/i.test(btn.innerText)) {
-        btn.click();
-        await new Promise(function(r) { setTimeout(r, 3000); });
-        // 새로 생긴 버튼도 확인
-        showMoreBtns = [...document.querySelectorAll('[class*="mainRoomList-foldButton"]')];
-      }
-    }
-
-    // commonRoomCard__ 로 시작하는 부모 카드만 선택 (title, content 자식 제외)
-    var cards = [...document.querySelectorAll('[class*="commonRoomCard"]')].filter(function(el) {
-      return /commonRoomCard__/.test(el.className);
+      rooms.push({ roomName, bedText, sizeText, smoking, facilityStr, occupancy, roomView, roomPhotos });
     });
-    var roomMap = new Map();
-    for (var card of cards) {
-      var result = await window.__processCard(card);
-      if (!result || roomMap.has(result.roomName)) continue;
-      roomMap.set(result.roomName, result);
-    }
-    var finalResult = [...roomMap.values()];
+    return rooms;
+  };
 
-    // 1차 스캔일 때만 호텔 전체 사진 수집
+  // 방 목록 API 호출
+  window.__fetchRoomListAPI = async function() {
+    var params = window.__parseUrlParams();
+    if (!params.hotelId) return null;
+
+    var payload = {
+      search: {
+        isRSC: false, isSSR: false,
+        hotelId: params.hotelId, roomId: 0,
+        checkIn: params.checkIn, checkOut: params.checkOut,
+        roomQuantity: 1, adult: 2, childInfoItems: [],
+        isIjtb: false, priceType: 0, hotelUniqueKey: "",
+        mustShowRoomList: [],
+        location: { geo: { cityID: params.cityId } },
+        filters: [],
+        meta: { fgt: -1, roomkey: "", minCurr: "", minPrice: "", roomToken: "" },
+        hasAidInUrl: false, cancelPolicyType: 0, fixSubhotel: 0,
+        listTraceId: "", abResultEntities: [],
+        extras: {
+          loginAB: "", exposeBedInfos: "",
+          enableChildAgeGroup: "T", needEntireSetRoomDesc: "T",
+          closeOnlineRoomListOptimize: true
+        }
+      },
+      head: {
+        platform: "PC", cver: "0", bu: "IBU", group: "trip",
+        locale: "en-XX", region: "XX", timezone: "9", currency: "USD", isSSR: false,
+        extension: [
+          { name: "cityId", value: String(params.cityId) },
+          { name: "checkIn", value: params.checkIn.slice(0,4)+'-'+params.checkIn.slice(4,6)+'-'+params.checkIn.slice(6,8) },
+          { name: "checkOut", value: params.checkOut.slice(0,4)+'-'+params.checkOut.slice(4,6)+'-'+params.checkOut.slice(6,8) }
+        ]
+      }
+    };
+
+    try {
+      var res = await fetch(window.location.origin + "/restapi/soa2/33269/getHotelRoomListOversea", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "accept": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      var data = await res.json();
+      return data;
+    } catch(e) {
+      console.log("[Scraper] API error:", e.message);
+      return null;
+    }
+  };
+
+  // 호텔 전체 사진 — API 방식
+  window.__scrapeHotelPhotos = async function() {
+    var params = window.__parseUrlParams();
+    if (!params.hotelId) return [];
+    try {
+      var res = await fetch(window.location.origin + "/restapi/soa2/33269/getHotelDetailAggregate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "accept": "application/json" },
+        body: JSON.stringify({
+          hotelId: params.hotelId,
+          cityId: params.cityId,
+          head: { platform: "PC", bu: "IBU", group: "trip", locale: "en-XX", currency: "USD" }
+        })
+      });
+      var data = await res.json();
+      if (data && data.data && data.data.hotelTopImage && data.data.hotelTopImage.imgUrlList) {
+        return data.data.hotelTopImage.imgUrlList.map(function(img) {
+          var highRes = img.diffPositionUrls && img.diffPositionUrls.find(function(u) { return u.position === 1; });
+          return highRes ? highRes.picUrl : img.imgUrl;
+        }).filter(Boolean);
+      }
+    } catch(e) {
+      console.log("[Scraper] Hotel photo API error:", e.message);
+    }
+    return [];
+  };
+
+  // 메인 스크랩
+  window.__scrapeRooms = async function(includeHotelPhotos) {
+    // 1. 방 목록 API
+    var apiData = await window.__fetchRoomListAPI();
+    var rooms = [];
+    if (apiData && apiData.data && apiData.data.physicRoomMap) {
+      rooms = window.__parsePhysicRoomMap(apiData.data.physicRoomMap);
+    }
+
+    // 2. 호텔 전체 사진 DOM
     var hotelPhotos = [];
     if (includeHotelPhotos) {
       hotelPhotos = await window.__scrapeHotelPhotos();
     }
 
-    window.__scrapeResult = { rooms: finalResult, hotelPhotos: hotelPhotos };
+    window.__scrapeResult = { rooms, hotelPhotos };
     window.__scrapeDone = true;
-    return { rooms: finalResult, hotelPhotos: hotelPhotos };
+    return { rooms, hotelPhotos };
   };
 }

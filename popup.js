@@ -145,6 +145,12 @@ function waitForTabLoad(tabId) {
 }
 
 async function scrapeTab(tabId, includeHotelPhotos = false) {
+  // 캐시된 content.js 리셋
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: () => { window.__scrapeRoomsLoaded = false; }
+  });
   // content.js를 MAIN world에 inject
   await chrome.scripting.executeScript({
     target: { tabId },
@@ -319,44 +325,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     (result1.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
     setStatus(t().scan1done((result1.rooms||[]).length, allRooms.size, hotelPhotos.length));
 
-    // 2차 스캔 (+3일)
-    const url2 = await getDateOffsetUrl(baseUrl, 3);
-    if (url2) {
-      setStatus(t().scan2);
-      const tab2 = await chrome.tabs.create({ url: url2, active: false });
-      openedTabs.push(tab2.id);
-      await waitForTabLoad(tab2.id);
-      const result2 = await scrapeTab(tab2.id, false);
-      (result2.rooms || []).forEach(r => {
-        if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r);
-        else if (r.roomPhotos && r.roomPhotos.length > 0 && (!allRooms.get(r.roomName).roomPhotos || allRooms.get(r.roomName).roomPhotos.length === 0)) {
-          // 기존 방에 사진이 없으면 사진만 업데이트
-          const existing = allRooms.get(r.roomName);
-          existing.roomPhotos = r.roomPhotos;
-          allRooms.set(r.roomName, existing);
-        }
-      });
-      setStatus(t().scan2done((result2.rooms||[]).length, allRooms.size));
-    }
-
-    // 3차 스캔 (+7일)
-    const url3 = await getDateOffsetUrl(baseUrl, 7);
-    if (url3) {
-      setStatus(t().scan3);
-      const tab3 = await chrome.tabs.create({ url: url3, active: false });
-      openedTabs.push(tab3.id);
-      await waitForTabLoad(tab3.id);
-      const result3 = await scrapeTab(tab3.id, false);
-      (result3.rooms || []).forEach(r => {
-        if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r);
-        else if (r.roomPhotos && r.roomPhotos.length > 0 && (!allRooms.get(r.roomName).roomPhotos || allRooms.get(r.roomName).roomPhotos.length === 0)) {
-          const existing = allRooms.get(r.roomName);
-          existing.roomPhotos = r.roomPhotos;
-          allRooms.set(r.roomName, existing);
-        }
-      });
-      setStatus(t().scan3done((result3.rooms||[]).length, allRooms.size));
-    }
+    // physicRoomMap 방식 - 1차만으로 전체 방 목록 확보
 
     const finalRooms = [...allRooms.values()];
 
