@@ -28,18 +28,18 @@ A Chrome Extension that automatically scrapes hotel room data from Trip.com and 
 
 ## File Structure
 
-- `manifest.json` — Extension configuration
+- `manifest.json` - Extension configuration
 - `popup.html` / `popup.js` — Extension popup UI and scan flow
-- `content.js` — Fetches room and hotel data via Trip.com API
-- `background.js` — Service Worker (required for Manifest V3)
-- `jszip.min.js` — Library for creating ZIP files
+- `content.js` - Fetches room and hotel data via Trip.com API
+- `background.js` - Service Worker (required for Manifest V3)
+- `jszip.min.js` - Library for creating ZIP files
 
 ---
 
 ## Notes
 
 - Works on any Trip.com regional domain (`www.trip.com`, `us.trip.com`, `kr.trip.com`, etc.)
-- Room data is fetched via `physicRoomMap` API — date-independent, returns all registered room types at once
+- Room data is fetched via `physicRoomMap` API - date-independent, returns all registered room types at once
 - Hotel photos are fetched via `getHotelDetailAggregate` API (up to 10 photos, high resolution 960x660)
 - Do not click other tabs while scanning is in progress
 - Photos marked `_LOW_QUALITY` do not meet Traveloka's minimum resolution requirements (1280×720)
