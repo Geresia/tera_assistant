@@ -54,7 +54,7 @@ function setLang(lang) {
 function t() { return STRINGS[currentLang]; }
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
-const CURRENT_VERSION = "4.0";
+const CURRENT_VERSION = "4.1";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
 
 async function checkForUpdates() {
