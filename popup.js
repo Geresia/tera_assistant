@@ -9,12 +9,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `완료: ${total}개 객실 | 호텔사진: ${photos}장`,
     noRooms: "객실을 찾지 못했습니다.",
     sending: "전송 중...",
-    sent: (n) => `✅ 전송 완료! 총 ${n}개 객실`,
+    sent: (n) => `전송 완료! 총 ${n}개 객실`,
     zipping: "사진 ZIP 생성 중...",
-    done: (rooms, photos) => `✅ 완료! 객실 ${rooms}개 + 사진 ${photos}장`,
-    noPhotos: (n) => `✅ 전송 완료! 총 ${n}개 객실 (사진 없음)`,
-    noJszip: (n) => `✅ 전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
-    update: (v) => `🔔 업데이트 있어요! v${v} → 클릭해서 다운로드`,
+    done: (rooms, photos) => `완료! 객실 ${rooms}개 + 사진 ${photos}장`,
+    noPhotos: (n) => `전송 완료! 총 ${n}개 객실 (사진 없음)`,
+    noJszip: (n) => `전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
+    update: (v) => `업데이트 있어요! v${v} → 클릭해서 다운로드`,
   },
   en: {
     startBtn: "Start Scan",
@@ -26,12 +26,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `Done: ${total} rooms | Hotel photos: ${photos}`,
     noRooms: "No rooms found.",
     sending: "Sending...",
-    sent: (n) => `✅ Sent! Total ${n} rooms`,
+    sent: (n) => `Sent! Total ${n} rooms`,
     zipping: "Creating photo ZIP...",
-    done: (rooms, photos) => `✅ Done! ${rooms} rooms + ${photos} photos`,
-    noPhotos: (n) => `✅ Sent! ${n} rooms (no photos)`,
-    noJszip: (n) => `✅ Sent! ${n} rooms (JSZip missing)`,
-    update: (v) => `🔔 Update available! v${v} → Click to download`,
+    done: (rooms, photos) => `Done! ${rooms} rooms + ${photos} photos`,
+    noPhotos: (n) => `Sent! ${n} rooms (no photos)`,
+    noJszip: (n) => `Sent! ${n} rooms (JSZip missing)`,
+    update: (v) => `Update available! v${v} → Click to download`,
   }
 };
 
@@ -98,7 +98,7 @@ async function scrapeTab(tabId, includeHotelPhotos = false) {
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
-    func: (withHotelPhotos) => {
+    func: () => {
       window.__scrapeResult = null;
       window.__scrapeDone = false;
       if (typeof window.__scrapeRooms !== "function") {
@@ -106,11 +106,11 @@ async function scrapeTab(tabId, includeHotelPhotos = false) {
         window.__scrapeDone = true;
         return;
       }
-      window.__scrapeRooms(withHotelPhotos)
+      window.__scrapeRooms()
         .then(result => { window.__scrapeResult = result; window.__scrapeDone = true; })
         .catch(() => { window.__scrapeResult = { rooms: [], hotelPhotos: [] }; window.__scrapeDone = true; });
     },
-    args: [includeHotelPhotos]
+    
   });
 
   // 폴링 (최대 120초)
@@ -147,7 +147,7 @@ function isLowQualityUrl(url) {
 
 const TARGET_W = 1280;
 const TARGET_H = 720;
-const NEAR_THRESHOLD = 0.7;
+const NEAR_THRESHOLD = 0.3;
 
 async function upscaleBlob(blob, targetW, targetH) {
   return new Promise(resolve => {
@@ -230,7 +230,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
     // 스캔
     setStatus(t().scan1);
-    const result1 = await scrapeTab(currentTab.id, true);
+    const result1 = await scrapeTab(currentTab.id);
     const hotelPhotos = result1.hotelPhotos || [];
     (result1.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
     setStatus(t().scan1done((result1.rooms||[]).length, allRooms.size, hotelPhotos.length));
@@ -253,7 +253,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         hotelId,
         source: "Trip.com",
         sourceUrl: baseUrl,
-        isKoreanHotel: /korea|\/kr\/|countryId=1\b/i.test(baseUrl),
         rooms: finalRooms
       })
     });
@@ -268,15 +267,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       const normalizeUrl = url => url.split('?')[0].trim();
       let photoCount = 0;
 
-      for (const room of finalRooms) {
-        if (!room.roomPhotos || !room.roomPhotos.length) continue;
-        const roomFolder = hotelFolder.folder(sanitizeName(room.roomName));
-        let idx = 1;
-        const roomSeenUrls = new Set();
-
-        for (const url of [...room.roomPhotos]) {
-          if (!url || roomSeenUrls.has(normalizeUrl(url))) continue;
-          roomSeenUrls.add(normalizeUrl(url));
+      async function processChunk(urls) {
+        return Promise.all(urls.map(async (url) => {
           const ext = url.includes(".webp") ? "jpg" : (url.match(/\.(jpg|jpeg|png)/i)?.[1] || "jpg");
           try {
             const urlLow = isLowQualityUrl(url);
@@ -290,12 +282,35 @@ document.getElementById("startBtn").addEventListener("click", async () => {
               blob = result.blob;
               low = result.isLow;
             }
-            const filename = `${String(idx).padStart(2, "0")}${low ? "_LOW_QUALITY" : ""}.${ext}`;
-            roomFolder.file(filename, blob);
-            idx++;
-            photoCount++;
+            return { blob, low, ext };
           } catch (e) {
             console.log("Photo fetch failed:", url);
+            return null;
+          }
+        }));
+      }
+
+      for (const room of finalRooms) {
+        if (!room.roomPhotos || !room.roomPhotos.length) continue;
+        const roomFolder = hotelFolder.folder(sanitizeName(room.roomName));
+        let idx = 1;
+        const roomSeenUrls = new Set();
+        const uniqueUrls = [...room.roomPhotos].filter(url => {
+          if (!url || roomSeenUrls.has(normalizeUrl(url))) return false;
+          roomSeenUrls.add(normalizeUrl(url));
+          return true;
+        });
+
+        // 6개씩 병렬 처리
+        for (let i = 0; i < uniqueUrls.length; i += 6) {
+          const chunk = uniqueUrls.slice(i, i + 6);
+          const results = await processChunk(chunk);
+          for (const result of results) {
+            if (!result) continue;
+            const filename = `${String(idx).padStart(2, "0")}${result.low ? "_LOW_QUALITY" : ""}.${result.ext}`;
+            roomFolder.file(filename, result.blob);
+            idx++;
+            photoCount++;
           }
         }
       }
@@ -304,29 +319,21 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       if (hotelPhotos && hotelPhotos.length > 0) {
         const hotelPhotoFolder = hotelFolder.folder("호텔 전체");
         const hotelOnlyUrls = new Set();
-        let hidx = 1;
-        for (const url of hotelPhotos) {
-          if (!url || hotelOnlyUrls.has(normalizeUrl(url))) continue;
+        const uniqueHotelUrls = hotelPhotos.filter(url => {
+          if (!url || hotelOnlyUrls.has(normalizeUrl(url))) return false;
           hotelOnlyUrls.add(normalizeUrl(url));
-          const ext = url.includes(".webp") ? "jpg" : (url.match(/\.(jpg|jpeg|png)/i)?.[1] || "jpg");
-          try {
-            const urlLow = isLowQualityUrl(url);
-            const res = await fetch(url);
-            let blob = await res.blob();
-            let low = false;
-            if (urlLow) {
-              low = true;
-            } else {
-              const result = await checkAndUpscale(blob);
-              blob = result.blob;
-              low = result.isLow;
-            }
-            const filename = `${String(hidx).padStart(2, "0")}${low ? "_LOW_QUALITY" : ""}.${ext}`;
-            hotelPhotoFolder.file(filename, blob);
+          return true;
+        });
+        let hidx = 1;
+        for (let i = 0; i < uniqueHotelUrls.length; i += 6) {
+          const chunk = uniqueHotelUrls.slice(i, i + 6);
+          const results = await processChunk(chunk);
+          for (const result of results) {
+            if (!result) continue;
+            const filename = `${String(hidx).padStart(2, "0")}${result.low ? "_LOW_QUALITY" : ""}.${result.ext}`;
+            hotelPhotoFolder.file(filename, result.blob);
             hidx++;
             photoCount++;
-          } catch (e) {
-            console.log("Hotel photo fetch failed:", url);
           }
         }
       }
