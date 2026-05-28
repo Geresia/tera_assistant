@@ -2,28 +2,28 @@ if (!window.__scrapeRoomsLoaded) {
   window.__scrapeRoomsLoaded = true;
 
   window.__facilityMap = [
-    { keywords: ["free wi-fi", "wi-fi in room", "wifi", "무료 wi-fi", "free internet"], code: "INTERNET_ACCESS_WIFI_COMPLIMENTARY" },
-    { keywords: ["air conditioning", "에어컨"], code: "AIR_CONDITIONING" },
-    { keywords: ["hair dryer", "헤어드라이어"], code: "HAIR_DRYER" },
-    { keywords: ["desk", "책상"], code: "DESK" },
-    { keywords: ["shower", "샤워"], code: "SHOWER" },
-    { keywords: ["bathrobes", "bathrobe", "목욕가운"], code: "BATHROBES" },
-    { keywords: ["refrigerator", "냉장고"], code: "REFRIGERATOR" },
-    { keywords: ["bottled water", "무료 생수"], code: "COMPLIMENTARY_BOTTLED_WATER" },
-    { keywords: ["lcd tv", "television", "tv", "텔레비전"], code: "TELEVISION" },
-    { keywords: ["bathtub", "욕조"], code: "BATHTUB" },
-    { keywords: ["microwave", "전자레인지"], code: "MICROWAVE" },
-    { keywords: ["washing machine", "세탁기"], code: "WASHING_MACHINE" },
-    { keywords: ["iron", "ironing", "다리미"], code: "IRONING_FACILITIES" },
-    { keywords: ["mini bar", "minibar", "미니바"], code: "MINI_BAR" },
-    { keywords: ["electric kettle", "coffee", "tea", "커피"], code: "COFFEE_TEA_MAKER" },
-    { keywords: ["balcony", "terrace", "발코니", "테라스"], code: "BALCONY_TERRACE" },
-    { keywords: ["connecting room", "interconnecting", "커넥팅"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
-    { keywords: ["shared bathroom", "공용 욕실"], code: "SHARED_BATHROOM" },
-    { keywords: ["hot water", "heated water", "온수"], code: "HEATED_WATER" },
-    { keywords: ["slippers", "슬리퍼"], code: "SLIPPERS" },
-    { keywords: ["safe", "금고"], code: "SAFE" },
-    { keywords: ["telephone", "전화"], code: "TELEPHONE" },
+    { keywords: ["free wi-fi", "wi-fi in room", "wifi", "free internet"], code: "INTERNET_ACCESS_WIFI_COMPLIMENTARY" },
+    { keywords: ["air conditioning"], code: "AIR_CONDITIONING" },
+    { keywords: ["hair dryer"], code: "HAIR_DRYER" },
+    { keywords: ["desk"], code: "DESK" },
+    { keywords: ["shower"], code: "SHOWER" },
+    { keywords: ["bathrobes", "bathrobe"], code: "BATHROBES" },
+    { keywords: ["refrigerator"], code: "REFRIGERATOR" },
+    { keywords: ["bottled water"], code: "COMPLIMENTARY_BOTTLED_WATER" },
+    { keywords: ["lcd tv", "television", "tv"], code: "TELEVISION" },
+    { keywords: ["bathtub"], code: "BATHTUB" },
+    { keywords: ["microwave"], code: "MICROWAVE" },
+    { keywords: ["washing machine"], code: "WASHING_MACHINE" },
+    { keywords: ["iron", "ironing"], code: "IRONING_FACILITIES" },
+    { keywords: ["mini bar", "minibar"], code: "MINI_BAR" },
+    { keywords: ["electric kettle", "coffee", "tea"], code: "COFFEE_TEA_MAKER" },
+    { keywords: ["balcony", "terrace"], code: "BALCONY_TERRACE" },
+    { keywords: ["connecting room", "interconnecting"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
+    { keywords: ["shared bathroom"], code: "SHARED_BATHROOM" },
+    { keywords: ["hot water", "heated water"], code: "HEATED_WATER" },
+    { keywords: ["slippers"], code: "SLIPPERS" },
+    { keywords: ["safe"], code: "SAFE" },
+    { keywords: ["telephone"], code: "TELEPHONE" },
   ];
 
   window.__extractFacilities = function(texts) {
@@ -79,7 +79,7 @@ if (!window.__scrapeRoomsLoaded) {
       var roomPhotos = [];
       if (room.pictureInfo && room.pictureInfo.length) {
         room.pictureInfo.forEach(function(pic) {
-          if (pic.url) roomPhotos.push(pic.url);
+          if (pic.url && roomPhotos.length < 12) roomPhotos.push(pic.url);
         });
       }
 
@@ -202,7 +202,7 @@ if (!window.__scrapeRoomsLoaded) {
   };
 
   // 메인 스크랩
-  window.__scrapeRooms = async function(includeHotelPhotos) {
+  window.__scrapeRooms = async function() {
     // 1. 방 목록 API
     var apiData = await window.__fetchRoomListAPI();
     var rooms = [];
@@ -210,11 +210,8 @@ if (!window.__scrapeRoomsLoaded) {
       rooms = window.__parsePhysicRoomMap(apiData.data.physicRoomMap);
     }
 
-    // 2. 호텔 전체 사진 DOM
-    var hotelPhotos = [];
-    if (includeHotelPhotos) {
-      hotelPhotos = await window.__scrapeHotelPhotos();
-    }
+    // 2. 호텔 전체 사진 API
+    var hotelPhotos = await window.__scrapeHotelPhotos();
 
     window.__scrapeResult = { rooms, hotelPhotos };
     window.__scrapeDone = true;
