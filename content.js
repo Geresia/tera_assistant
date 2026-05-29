@@ -9,20 +9,21 @@ if (!window.__scrapeRoomsLoaded) {
     { keywords: ["shower"], code: "SHOWER" },
     { keywords: ["bathrobes", "bathrobe"], code: "BATHROBES" },
     { keywords: ["refrigerator"], code: "REFRIGERATOR" },
-    { keywords: ["bottled water"], code: "COMPLIMENTARY_BOTTLED_WATER" },
+    { keywords: ["bottled water", "무료 생수"], code: "COMPLIMENTARY_BOTTLED_WATER" },
     { keywords: ["lcd tv", "television", "tv"], code: "TELEVISION" },
     { keywords: ["bathtub"], code: "BATHTUB" },
-    { keywords: ["microwave"], code: "MICROWAVE" },
+    { keywords: ["microwave", "전자레인지"], code: "MICROWAVE" },
     { keywords: ["washing machine"], code: "WASHING_MACHINE" },
     { keywords: ["iron", "ironing"], code: "IRONING_FACILITIES" },
     { keywords: ["mini bar", "minibar"], code: "MINI_BAR" },
     { keywords: ["electric kettle", "coffee", "tea"], code: "COFFEE_TEA_MAKER" },
     { keywords: ["balcony", "terrace"], code: "BALCONY_TERRACE" },
-    { keywords: ["connecting room", "interconnecting"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
+    { keywords: ["connecting room", "interconnecting", "커넥팅"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
     { keywords: ["shared bathroom"], code: "SHARED_BATHROOM" },
     { keywords: ["hot water", "heated water"], code: "HEATED_WATER" },
     { keywords: ["slippers"], code: "SLIPPERS" },
     { keywords: ["safe"], code: "SAFE" },
+    { keywords: ["telephone"], code: "TELEPHONE" },
   ];
 
   window.__extractFacilities = function(texts) {
@@ -68,7 +69,20 @@ if (!window.__scrapeRoomsLoaded) {
   };
 
   // physicRoomMap → rooms 배열로 변환
-  window.__parsePhysicRoomMap = function(physicRoomMap) {
+  window.__parsePhysicRoomMap = function(physicRoomMap, saleRoomMap) {
+    // physicalRoomId별 최소 guestCount 추출
+    var occupancyMap = {};
+    if (saleRoomMap) {
+      Object.values(saleRoomMap).forEach(function(sale) {
+        var pid = sale.physicalRoomId;
+        var count = sale.guestCountInfo && sale.guestCountInfo.guestCount;
+        if (pid && count) {
+          if (!occupancyMap[pid] || count < occupancyMap[pid]) {
+            occupancyMap[pid] = count;
+          }
+        }
+      });
+    }
     var rooms = [];
     Object.keys(physicRoomMap).forEach(function(roomId) {
       var room = physicRoomMap[roomId];
@@ -117,23 +131,26 @@ if (!window.__scrapeRoomsLoaded) {
         else if (t.includes("lake")) roomView = "LAKE_VIEW";
       }
 
-      var occupancy = 2;
+      var occupancy = occupancyMap[room.id] || 2;
 
-      rooms.push({ roomName, bedText, sizeText, smoking, facilityStr, occupancy, roomView, roomPhotos });
+      rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, roomPhotos });
     });
     return rooms;
   };
 
   // 방 목록 API 호출
-  window.__fetchRoomListAPI = async function() {
+  window.__fetchRoomListAPI = async function(checkInOverride, checkOutOverride) {
     var params = window.__parseUrlParams();
     if (!params.hotelId) return null;
+
+    var checkIn = checkInOverride || params.checkIn;
+    var checkOut = checkOutOverride || params.checkOut;
 
     var payload = {
       search: {
         isRSC: false, isSSR: false,
         hotelId: params.hotelId, roomId: 0,
-        checkIn: params.checkIn, checkOut: params.checkOut,
+        checkIn: checkIn, checkOut: checkOut,
         roomQuantity: 1, adult: 2, childInfoItems: [],
         isIjtb: false, priceType: 0, hotelUniqueKey: "",
         mustShowRoomList: [],
@@ -153,8 +170,8 @@ if (!window.__scrapeRoomsLoaded) {
         locale: "en-XX", region: "XX", timezone: "9", currency: "USD", isSSR: false,
         extension: [
           { name: "cityId", value: String(params.cityId) },
-          { name: "checkIn", value: params.checkIn.slice(0,4)+'-'+params.checkIn.slice(4,6)+'-'+params.checkIn.slice(6,8) },
-          { name: "checkOut", value: params.checkOut.slice(0,4)+'-'+params.checkOut.slice(4,6)+'-'+params.checkOut.slice(6,8) }
+          { name: "checkIn", value: checkIn.slice(0,4)+'-'+checkIn.slice(4,6)+'-'+checkIn.slice(6,8) },
+          { name: "checkOut", value: checkOut.slice(0,4)+'-'+checkOut.slice(4,6)+'-'+checkOut.slice(6,8) }
         ]
       }
     };
@@ -200,13 +217,46 @@ if (!window.__scrapeRoomsLoaded) {
     return [];
   };
 
+  // 날짜 오프셋 계산
+  window.__getOffsetDates = function(offsetDays) {
+    var params = window.__parseUrlParams();
+    var base = new Date(params.checkIn.slice(0,4)+'-'+params.checkIn.slice(4,6)+'-'+params.checkIn.slice(6,8));
+    base.setDate(base.getDate() + offsetDays);
+    var next = new Date(base);
+    next.setDate(next.getDate() + 1);
+    var fmt = function(d) {
+      return d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+    };
+    return { checkIn: fmt(base), checkOut: fmt(next) };
+  };
+
   // 메인 스크랩
   window.__scrapeRooms = async function() {
-    // 1. 방 목록 API
-    var apiData = await window.__fetchRoomListAPI();
+    // 1. 방 목록 API - 3개 날짜 병렬 호출 후 physicRoomMap 머지
+    var offsets = [0, 30, 60];
+    var apiResults = await Promise.all(offsets.map(function(offset) {
+      var dates = window.__getOffsetDates(offset);
+      return window.__fetchRoomListAPI(dates.checkIn, dates.checkOut);
+    }));
+
+    var mergedPhysicRoomMap = {};
+    apiResults.forEach(function(apiData) {
+      if (apiData && apiData.data && apiData.data.physicRoomMap) {
+        Object.assign(mergedPhysicRoomMap, apiData.data.physicRoomMap);
+      }
+    });
+
+    // saleRoomMap도 병렬로 수집 (첫 번째 결과에서 사용)
+    var mergedSaleRoomMap = {};
+    apiResults.forEach(function(apiData) {
+      if (apiData && apiData.data && apiData.data.saleRoomMap) {
+        Object.assign(mergedSaleRoomMap, apiData.data.saleRoomMap);
+      }
+    });
+
     var rooms = [];
-    if (apiData && apiData.data && apiData.data.physicRoomMap) {
-      rooms = window.__parsePhysicRoomMap(apiData.data.physicRoomMap);
+    if (Object.keys(mergedPhysicRoomMap).length > 0) {
+      rooms = window.__parsePhysicRoomMap(mergedPhysicRoomMap, mergedSaleRoomMap);
     }
 
     // 2. 호텔 전체 사진 API
