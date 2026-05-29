@@ -232,8 +232,8 @@ if (!window.__scrapeRoomsLoaded) {
 
   // 메인 스크랩
   window.__scrapeRooms = async function() {
-    // 1. 방 목록 API - 3개 날짜 병렬 호출 후 physicRoomMap 머지
-    var offsets = [0, 30, 60];
+    // 1. 방 목록 API - 12개 날짜 병렬 호출 후 physicRoomMap 머지
+    var offsets = [0, 5, 10, 15, 20, 25, 30, 40, 45, 50, 55, 60];
     var apiResults = await Promise.all(offsets.map(function(offset) {
       var dates = window.__getOffsetDates(offset);
       return window.__fetchRoomListAPI(dates.checkIn, dates.checkOut);
