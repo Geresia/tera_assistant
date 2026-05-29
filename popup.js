@@ -301,9 +301,9 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           return true;
         });
 
-        // 6개씩 병렬 처리
-        for (let i = 0; i < uniqueUrls.length; i += 6) {
-          const chunk = uniqueUrls.slice(i, i + 6);
+        // 12개씩 병렬 처리
+        for (let i = 0; i < uniqueUrls.length; i += 12) {
+          const chunk = uniqueUrls.slice(i, i + 12);
           const results = await processChunk(chunk);
           for (const result of results) {
             if (!result) continue;
@@ -325,8 +325,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           return true;
         });
         let hidx = 1;
-        for (let i = 0; i < uniqueHotelUrls.length; i += 6) {
-          const chunk = uniqueHotelUrls.slice(i, i + 6);
+        for (let i = 0; i < uniqueHotelUrls.length; i += 12) {
+          const chunk = uniqueHotelUrls.slice(i, i + 12);
           const results = await processChunk(chunk);
           for (const result of results) {
             if (!result) continue;
