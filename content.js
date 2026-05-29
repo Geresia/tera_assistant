@@ -22,8 +22,6 @@ if (!window.__scrapeRoomsLoaded) {
     { keywords: ["shared bathroom"], code: "SHARED_BATHROOM" },
     { keywords: ["hot water", "heated water"], code: "HEATED_WATER" },
     { keywords: ["slippers"], code: "SLIPPERS" },
-    { keywords: ["safe"], code: "SAFE" },
-    { keywords: ["telephone"], code: "TELEPHONE" },
   ];
 
   window.__extractFacilities = function(texts) {
