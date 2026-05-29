@@ -9,12 +9,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `완료: ${total}개 객실 | 호텔사진: ${photos}장`,
     noRooms: "객실을 찾지 못했습니다.",
     sending: "전송 중...",
-    sent: (n) => `전송 완료! 총 ${n}개 객실`,
+    sent: (n) => `✅ 전송 완료! 총 ${n}개 객실`,
     zipping: "사진 ZIP 생성 중...",
-    done: (rooms, photos) => `완료! 객실 ${rooms}개 + 사진 ${photos}장`,
-    noPhotos: (n) => `전송 완료! 총 ${n}개 객실 (사진 없음)`,
-    noJszip: (n) => `전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
-    update: (v) => `업데이트 있어요! v${v} → 클릭해서 다운로드`,
+    done: (rooms, photos) => `✅ 완료! 객실 ${rooms}개 + 사진 ${photos}장`,
+    noPhotos: (n) => `✅ 전송 완료! 총 ${n}개 객실 (사진 없음)`,
+    noJszip: (n) => `✅ 전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
+    update: (v) => `🔔 업데이트 있어요! v${v} → 클릭해서 다운로드`,
   },
   en: {
     startBtn: "Start Scan",
@@ -26,12 +26,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `Done: ${total} rooms | Hotel photos: ${photos}`,
     noRooms: "No rooms found.",
     sending: "Sending...",
-    sent: (n) => `Sent! Total ${n} rooms`,
+    sent: (n) => `✅ Sent! Total ${n} rooms`,
     zipping: "Creating photo ZIP...",
-    done: (rooms, photos) => `Done! ${rooms} rooms + ${photos} photos`,
-    noPhotos: (n) => `Sent! ${n} rooms (no photos)`,
-    noJszip: (n) => `Sent! ${n} rooms (JSZip missing)`,
-    update: (v) => `Update available! v${v} → Click to download`,
+    done: (rooms, photos) => `✅ Done! ${rooms} rooms + ${photos} photos`,
+    noPhotos: (n) => `✅ Sent! ${n} rooms (no photos)`,
+    noJszip: (n) => `✅ Sent! ${n} rooms (JSZip missing)`,
+    update: (v) => `🔔 Update available! v${v} → Click to download`,
   }
 };
 
@@ -54,7 +54,7 @@ function setLang(lang) {
 function t() { return STRINGS[currentLang]; }
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
-const CURRENT_VERSION = "4.21";
+const CURRENT_VERSION = "4.0";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
 
 async function checkForUpdates() {
@@ -147,20 +147,15 @@ function isLowQualityUrl(url) {
 
 const TARGET_W = 1280;
 const TARGET_H = 720;
-const NEAR_THRESHOLD = 0.3;
+const NEAR_THRESHOLD = 0.7;
+const MAX_W = 4096;
+const MAX_H = 4096;
 
-async function upscaleBlob(blob, targetW, targetH) {
+async function resizeBlob(blob, newW, newH) {
   return new Promise(resolve => {
     const objUrl = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const srcW = img.naturalWidth;
-      const srcH = img.naturalHeight;
-      const scaleW = targetW / srcW;
-      const scaleH = targetH / srcH;
-      const scale = Math.max(scaleW, scaleH);
-      const newW = Math.round(srcW * scale);
-      const newH = Math.round(srcH * scale);
       const canvas = document.createElement('canvas');
       canvas.width = newW;
       canvas.height = newH;
@@ -187,9 +182,20 @@ async function checkAndUpscale(blob) {
       const ratio = w / h;
       URL.revokeObjectURL(objUrl);
       if (ratio < 0.5 || ratio > 2.0) { resolve({ blob, isLow: true }); return; }
+
+      // 최대값 초과 시 다운스케일
+      if (w > MAX_W || h > MAX_H) {
+        const scale = Math.min(MAX_W / w, MAX_H / h);
+        const newW = Math.round(w * scale);
+        const newH = Math.round(h * scale);
+        const downscaled = await resizeBlob(blob, newW, newH);
+        resolve({ blob: downscaled, isLow: false });
+        return;
+      }
+
       if (w >= TARGET_W && h >= TARGET_H) { resolve({ blob, isLow: false }); return; }
       if (w >= TARGET_W * NEAR_THRESHOLD && h >= TARGET_H * NEAR_THRESHOLD) {
-        const upscaled = await upscaleBlob(blob, TARGET_W, TARGET_H);
+        const upscaled = await resizeBlob(blob, TARGET_W, TARGET_H);
         resolve({ blob: upscaled, isLow: false });
         return;
       }
@@ -253,6 +259,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         hotelId,
         source: "Trip.com",
         sourceUrl: baseUrl,
+        isKoreanHotel: /korea|\/kr\/|countryId=1\b/i.test(baseUrl),
         rooms: finalRooms
       })
     });
@@ -301,9 +308,9 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           return true;
         });
 
-        // 12개씩 병렬 처리
-        for (let i = 0; i < uniqueUrls.length; i += 12) {
-          const chunk = uniqueUrls.slice(i, i + 12);
+        // 6개씩 병렬 처리
+        for (let i = 0; i < uniqueUrls.length; i += 6) {
+          const chunk = uniqueUrls.slice(i, i + 6);
           const results = await processChunk(chunk);
           for (const result of results) {
             if (!result) continue;
@@ -325,8 +332,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           return true;
         });
         let hidx = 1;
-        for (let i = 0; i < uniqueHotelUrls.length; i += 12) {
-          const chunk = uniqueHotelUrls.slice(i, i + 12);
+        for (let i = 0; i < uniqueHotelUrls.length; i += 6) {
+          const chunk = uniqueHotelUrls.slice(i, i + 6);
           const results = await processChunk(chunk);
           for (const result of results) {
             if (!result) continue;
