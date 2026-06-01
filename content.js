@@ -89,8 +89,10 @@ if (!window.__scrapeRoomsLoaded) {
 
       var roomPhotos = [];
       if (room.pictureInfo && room.pictureInfo.length) {
-        room.pictureInfo.forEach(function(pic) {
-          if (pic.url && roomPhotos.length < 12) roomPhotos.push(pic.url);
+        var cat1 = room.pictureInfo.filter(function(pic) { return pic.categoryId === 1; });
+        var photosToUse = cat1.length > 0 ? cat1 : room.pictureInfo;
+        photosToUse.forEach(function(pic) {
+          if (pic.url) roomPhotos.push(pic.url);
         });
       }
 
