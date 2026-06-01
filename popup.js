@@ -9,12 +9,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `완료: ${total}개 객실 | 호텔사진: ${photos}장`,
     noRooms: "객실을 찾지 못했습니다.",
     sending: "전송 중...",
-    sent: (n) => `✅ 전송 완료! 총 ${n}개 객실`,
+    sent: (n) => `전송 완료! 총 ${n}개 객실`,
     zipping: "사진 ZIP 생성 중...",
-    done: (rooms, photos) => `✅ 완료! 객실 ${rooms}개 + 사진 ${photos}장`,
-    noPhotos: (n) => `✅ 전송 완료! 총 ${n}개 객실 (사진 없음)`,
-    noJszip: (n) => `✅ 전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
-    update: (v) => `🔔 업데이트 있어요! v${v} → 클릭해서 다운로드`,
+    done: (rooms, photos) => `완료! 객실 ${rooms}개 + 사진 ${photos}장`,
+    noPhotos: (n) => `전송 완료! 총 ${n}개 객실 (사진 없음)`,
+    noJszip: (n) => `전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
+    update: (v) => `업데이트 있어요! v${v} → 클릭해서 다운로드`,
   },
   en: {
     startBtn: "Start Scan",
@@ -26,12 +26,12 @@ const STRINGS = {
     scan1done: (rooms, total, photos) => `Done: ${total} rooms | Hotel photos: ${photos}`,
     noRooms: "No rooms found.",
     sending: "Sending...",
-    sent: (n) => `✅ Sent! Total ${n} rooms`,
+    sent: (n) => `Sent! Total ${n} rooms`,
     zipping: "Creating photo ZIP...",
-    done: (rooms, photos) => `✅ Done! ${rooms} rooms + ${photos} photos`,
-    noPhotos: (n) => `✅ Sent! ${n} rooms (no photos)`,
-    noJszip: (n) => `✅ Sent! ${n} rooms (JSZip missing)`,
-    update: (v) => `🔔 Update available! v${v} → Click to download`,
+    done: (rooms, photos) => `Done! ${rooms} rooms + ${photos} photos`,
+    noPhotos: (n) => `Sent! ${n} rooms (no photos)`,
+    noJszip: (n) => `Sent! ${n} rooms (JSZip missing)`,
+    update: (v) => `Update available! v${v} → Click to download`,
   }
 };
 
@@ -54,7 +54,7 @@ function setLang(lang) {
 function t() { return STRINGS[currentLang]; }
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
-const CURRENT_VERSION = "4.0";
+const CURRENT_VERSION = "4.3";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
 
 async function checkForUpdates() {
@@ -81,13 +81,11 @@ function setStatus(msg, type = "") {
 }
 
 async function scrapeTab(tabId, includeHotelPhotos = false) {
-  // 캐시된 content.js 리셋
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     func: () => { window.__scrapeRoomsLoaded = false; }
   });
-  // content.js를 MAIN world에 inject
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ["content.js"],
@@ -110,10 +108,8 @@ async function scrapeTab(tabId, includeHotelPhotos = false) {
         .then(result => { window.__scrapeResult = result; window.__scrapeDone = true; })
         .catch(() => { window.__scrapeResult = { rooms: [], hotelPhotos: [] }; window.__scrapeDone = true; });
     },
-    
   });
 
-  // 폴링 (최대 120초)
   for (let i = 0; i < 600; i++) {
     await new Promise(r => setTimeout(r, 500));
     const results = await chrome.scripting.executeScript({
@@ -127,12 +123,18 @@ async function scrapeTab(tabId, includeHotelPhotos = false) {
   return { rooms: [], hotelPhotos: [] };
 }
 
+const TARGET_W = 1280;
+const TARGET_H = 720;
+const NEAR_THRESHOLD = 0.3;
+const MAX_W = 4096;
+const MAX_H = 4096;
+
 function isLowQualityUrl(url) {
   const match = url.match(/_R_(\d+)_(\d+)_/);
   if (match) {
     const w = Number(match[1]);
     const h = Number(match[2]);
-    if (w < 1280 || h < 720) return true;
+    if (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD) return true;
     const ratio = w / h;
     if (ratio < 0.5 || ratio > 2.0) return true;
   }
@@ -140,16 +142,10 @@ function isLowQualityUrl(url) {
   if (wMatch) {
     const w = Number(wMatch[1]);
     const h = Number(wMatch[2]);
-    if (h > 0 && (w < 1280 || h < 720)) return true;
+    if (h > 0 && (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD)) return true;
   }
   return false;
 }
-
-const TARGET_W = 1280;
-const TARGET_H = 720;
-const NEAR_THRESHOLD = 0.7;
-const MAX_W = 4096;
-const MAX_H = 4096;
 
 async function resizeBlob(blob, newW, newH) {
   return new Promise(resolve => {
@@ -183,7 +179,6 @@ async function checkAndUpscale(blob) {
       URL.revokeObjectURL(objUrl);
       if (ratio < 0.5 || ratio > 2.0) { resolve({ blob, isLow: true }); return; }
 
-      // 최대값 초과 시 다운스케일
       if (w > MAX_W || h > MAX_H) {
         const scale = Math.min(MAX_W / w, MAX_H / h);
         const newW = Math.round(w * scale);
@@ -234,7 +229,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
     const allRooms = new Map();
 
-    // 스캔
     setStatus(t().scan1);
     const result1 = await scrapeTab(currentTab.id);
     const hotelPhotos = result1.hotelPhotos || [];
@@ -249,7 +243,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       return;
     }
 
-    // Google Sheets 전송
     setStatus(t().sending);
     await fetch(WEB_APP_URL, {
       method: "POST",
@@ -266,7 +259,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
     setStatus(t().sent(finalRooms.length), "success");
 
-    // 사진 ZIP 생성
     if (typeof JSZip !== "undefined") {
       setStatus(t().zipping);
       const zip = new JSZip();
@@ -308,7 +300,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           return true;
         });
 
-        // 6개씩 병렬 처리
         for (let i = 0; i < uniqueUrls.length; i += 6) {
           const chunk = uniqueUrls.slice(i, i + 6);
           const results = await processChunk(chunk);
@@ -322,7 +313,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         }
       }
 
-      // 호텔 전체 사진
       if (hotelPhotos && hotelPhotos.length > 0) {
         const hotelPhotoFolder = hotelFolder.folder("호텔 전체");
         const hotelOnlyUrls = new Set();
@@ -370,7 +360,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   document.getElementById("hotelId").focus();
 });
 
-// 팝업 초기화
 setLang(currentLang);
 document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
 document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
