@@ -68,15 +68,15 @@ if (!window.__scrapeRoomsLoaded) {
 
   // physicRoomMap → rooms 배열로 변환
   window.__parsePhysicRoomMap = function(physicRoomMap, saleRoomMap) {
-    // physicalRoomId별 최소 guestCount 추출
+    // physicalRoomId별 최대 guestCount 추출
     var occupancyMap = {};
     if (saleRoomMap) {
       Object.values(saleRoomMap).forEach(function(sale) {
         var pid = sale.physicalRoomId;
         var count = sale.guestCountInfo && sale.guestCountInfo.guestCount;
         if (pid && count) {
-          if (!occupancyMap[pid] || count < occupancyMap[pid]) {
-            occupancyMap[pid] = count;
+          if (!occupancyMap[String(pid)] || count > occupancyMap[String(pid)]) {
+            occupancyMap[String(pid)] = count;
           }
         }
       });
@@ -129,7 +129,7 @@ if (!window.__scrapeRoomsLoaded) {
         else if (t.includes("lake")) roomView = "LAKE_VIEW";
       }
 
-      var occupancy = occupancyMap[room.id] || 2;
+      var occupancy = occupancyMap[String(room.id)] || 2;
 
       rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, roomPhotos });
     });
@@ -244,7 +244,7 @@ if (!window.__scrapeRoomsLoaded) {
       }
     });
 
-    // saleRoomMap도 병렬로 수집 (첫 번째 결과에서 사용)
+    // saleRoomMap도 병렬로 수집
     var mergedSaleRoomMap = {};
     apiResults.forEach(function(apiData) {
       if (apiData && apiData.data && apiData.data.saleRoomMap) {
