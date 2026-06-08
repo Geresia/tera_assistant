@@ -35,7 +35,6 @@ if (!window.__scrapeRoomsLoaded) {
     return result.join(", ");
   };
 
-  // URL에서 hotelId, cityId 추출
   window.__parseUrlParams = function() {
     var url = window.location.href;
     var hotelIdMatch = url.match(/hotelId=(\d+)/i) || url.match(/hotel-detail-(\d+)/i);
@@ -66,9 +65,48 @@ if (!window.__scrapeRoomsLoaded) {
     return { hotelId, cityId, checkIn, checkOut };
   };
 
-  // physicRoomMap → rooms 배열로 변환
+  // 페이지 HTML에서 seoHotelRooms 추출
+  window.__extractSeoRoomData = function() {
+    var targetScript = null;
+    document.querySelectorAll('script').forEach(function(s) {
+      if (s.textContent.includes('physicRoomMap')) targetScript = s;
+    });
+    if (!targetScript) return null;
+
+    var txt = targetScript.textContent;
+    var pidx = txt.indexOf('physicRoomMap');
+    if (pidx === -1) return null;
+
+    var strStart = -1, strEnd = -1;
+    for (var i = pidx; i >= 0; i--) {
+      if (txt[i] === '"' && txt[i-1] !== '\\') { strStart = i + 1; break; }
+    }
+    for (var j = pidx; j < txt.length; j++) {
+      if (txt[j] === '"' && txt[j-1] !== '\\') { strEnd = j; break; }
+    }
+    if (strStart < 0 || strEnd < 0) return null;
+
+    try {
+      var unescaped = JSON.parse('"' + txt.slice(strStart, strEnd) + '"');
+      var sidx = unescaped.indexOf('"seoHotelRooms":{');
+      if (sidx === -1) return null;
+
+      var depth = 0, end = sidx + '"seoHotelRooms":'.length;
+      for (var k = end; k < unescaped.length; k++) {
+        if (unescaped[k] === '{') depth++;
+        else if (unescaped[k] === '}') {
+          depth--;
+          if (depth === 0) { end = k + 1; break; }
+        }
+      }
+      return JSON.parse(unescaped.slice(sidx + '"seoHotelRooms":'.length, end));
+    } catch(e) {
+      console.log("[Scraper] seoHotelRooms parse error:", e.message);
+      return null;
+    }
+  };
+
   window.__parsePhysicRoomMap = function(physicRoomMap, saleRoomMap) {
-    // physicalRoomId별 최대 guestCount 추출
     var occupancyMap = {};
     if (saleRoomMap) {
       Object.values(saleRoomMap).forEach(function(sale) {
@@ -81,6 +119,7 @@ if (!window.__scrapeRoomsLoaded) {
         }
       });
     }
+
     var rooms = [];
     Object.keys(physicRoomMap).forEach(function(roomId) {
       var room = physicRoomMap[roomId];
@@ -109,7 +148,8 @@ if (!window.__scrapeRoomsLoaded) {
       var facilityStr = window.__extractFacilities(facilityTexts);
 
       var bedText = (room.bedInfo && room.bedInfo.title) ? room.bedInfo.title : "";
-      var sizeText = (room.areaInfo && room.areaInfo.title) ? room.areaInfo.title : "";
+      var sizeText = (room.areaInfo && room.areaInfo.title) ? room.areaInfo.title :
+                     (room.area ? room.area + "㎡" : "");
 
       var smoking = "";
       if (room.smokeInfo && room.smokeInfo.title) {
@@ -131,14 +171,29 @@ if (!window.__scrapeRoomsLoaded) {
         else if (t.includes("lake")) roomView = "LAKE_VIEW";
       }
 
-      var occupancy = occupancyMap[String(room.id)] || 2;
+      var occupancy = occupancyMap[String(room.id)] || room.person || 2;
 
-      rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, roomPhotos });
+      rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, smoking, roomPhotos });
     });
     return rooms;
   };
 
-  // 방 목록 API 호출
+  // phantom-token 가로채기 (API fallback용)
+  window.__phantomToken = "";
+  (function() {
+    var origFetch = window.fetch;
+    window.fetch = function() {
+      var url = arguments[0] || "";
+      var opts = arguments[1] || {};
+      var headers = opts.headers || {};
+      if (typeof url === "string" && url.includes("getHotelRoomList")) {
+        var pt = headers["phantom-token"] || headers["Phantom-Token"] || "";
+        if (pt) window.__phantomToken = pt;
+      }
+      return origFetch.apply(this, arguments);
+    };
+  })();
+
   window.__fetchRoomListAPI = async function(checkInOverride, checkOutOverride) {
     var params = window.__parseUrlParams();
     if (!params.hotelId) return null;
@@ -177,9 +232,12 @@ if (!window.__scrapeRoomsLoaded) {
     };
 
     try {
+      var reqHeaders = { "Content-Type": "application/json", "accept": "application/json" };
+      if (window.__phantomToken) reqHeaders["phantom-token"] = window.__phantomToken;
+
       var res = await fetch(window.location.origin + "/restapi/soa2/33269/getHotelRoomListOversea", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "accept": "application/json" },
+        headers: reqHeaders,
         body: JSON.stringify(payload)
       });
       var data = await res.json();
@@ -190,7 +248,6 @@ if (!window.__scrapeRoomsLoaded) {
     }
   };
 
-  // 호텔 전체 사진 — API 방식
   window.__scrapeHotelPhotos = async function() {
     var params = window.__parseUrlParams();
     if (!params.hotelId) return [];
@@ -217,7 +274,6 @@ if (!window.__scrapeRoomsLoaded) {
     return [];
   };
 
-  // 날짜 오프셋 계산
   window.__getOffsetDates = function(offsetDays) {
     var params = window.__parseUrlParams();
     var base = new Date(params.checkIn.slice(0,4)+'-'+params.checkIn.slice(4,6)+'-'+params.checkIn.slice(6,8));
@@ -230,36 +286,38 @@ if (!window.__scrapeRoomsLoaded) {
     return { checkIn: fmt(base), checkOut: fmt(next) };
   };
 
-  // 메인 스크랩
   window.__scrapeRooms = async function() {
-    // 1. 방 목록 API - 12개 날짜 병렬 호출 후 physicRoomMap 머지
-    var offsets = [0, 5, 10, 15, 20, 25, 30, 40, 45, 50, 55, 60];
-    var apiResults = await Promise.all(offsets.map(function(offset) {
-      var dates = window.__getOffsetDates(offset);
-      return window.__fetchRoomListAPI(dates.checkIn, dates.checkOut);
-    }));
-
-    var mergedPhysicRoomMap = {};
-    apiResults.forEach(function(apiData) {
-      if (apiData && apiData.data && apiData.data.physicRoomMap) {
-        Object.assign(mergedPhysicRoomMap, apiData.data.physicRoomMap);
-      }
-    });
-
-    // saleRoomMap도 병렬로 수집
-    var mergedSaleRoomMap = {};
-    apiResults.forEach(function(apiData) {
-      if (apiData && apiData.data && apiData.data.saleRoomMap) {
-        Object.assign(mergedSaleRoomMap, apiData.data.saleRoomMap);
-      }
-    });
-
     var rooms = [];
-    if (Object.keys(mergedPhysicRoomMap).length > 0) {
-      rooms = window.__parsePhysicRoomMap(mergedPhysicRoomMap, mergedSaleRoomMap);
+
+    // 1순위: 페이지 HTML에서 seoHotelRooms 파싱
+    var seoData = window.__extractSeoRoomData();
+    if (seoData && seoData.physicRoomMap && Object.keys(seoData.physicRoomMap).length > 0) {
+      console.log("[Scraper] Using seoHotelRooms, rooms:", Object.keys(seoData.physicRoomMap).length);
+      rooms = window.__parsePhysicRoomMap(seoData.physicRoomMap, null);
+    } else {
+      // 2순위: API fallback
+      console.log("[Scraper] Falling back to API calls");
+      var offsets = [0, 5, 10, 15, 20, 25, 30, 40, 45, 50, 55, 60];
+      var apiResults = await Promise.all(offsets.map(function(offset) {
+        var dates = window.__getOffsetDates(offset);
+        return window.__fetchRoomListAPI(dates.checkIn, dates.checkOut);
+      }));
+
+      var mergedPhysicRoomMap = {};
+      var mergedSaleRoomMap = {};
+      apiResults.forEach(function(apiData) {
+        if (apiData && apiData.data) {
+          if (apiData.data.physicRoomMap) Object.assign(mergedPhysicRoomMap, apiData.data.physicRoomMap);
+          if (apiData.data.saleRoomMap) Object.assign(mergedSaleRoomMap, apiData.data.saleRoomMap);
+        }
+      });
+
+      if (Object.keys(mergedPhysicRoomMap).length > 0) {
+        rooms = window.__parsePhysicRoomMap(mergedPhysicRoomMap, mergedSaleRoomMap);
+      }
     }
 
-    // 2. 호텔 전체 사진 API
+    // 호텔 전체 사진
     var hotelPhotos = await window.__scrapeHotelPhotos();
 
     window.__scrapeResult = { rooms, hotelPhotos };

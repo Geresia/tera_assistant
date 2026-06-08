@@ -15,6 +15,12 @@ const STRINGS = {
     noPhotos: (n) => `전송 완료! 총 ${n}개 객실 (사진 없음)`,
     noJszip: (n) => `전송 완료! 총 ${n}개 객실 (JSZip 없음)`,
     update: (v) => `업데이트 있어요! v${v} → 클릭해서 다운로드`,
+    teraBtn: "Tera Autofill",
+    teraNoRooms: "먼저 스캔을 실행하세요.",
+    teraNotTera: "tera.traveloka.com 페이지에서 실행하세요.",
+    teraRunning: (cur, total) => `Tera 입력 중... (${cur}/${total})`,
+    teraDone: (n) => `Tera 완료! ${n}개 객실 등록`,
+    teraError: (name) => `오류: ${name}`,
   },
   en: {
     startBtn: "Start Scan",
@@ -32,10 +38,46 @@ const STRINGS = {
     noPhotos: (n) => `Sent! ${n} rooms (no photos)`,
     noJszip: (n) => `Sent! ${n} rooms (JSZip missing)`,
     update: (v) => `Update available! v${v} → Click to download`,
+    teraBtn: "Tera Autofill",
+    teraNoRooms: "Please scan first.",
+    teraNotTera: "Please open tera.traveloka.com first.",
+    teraRunning: (cur, total) => `Filling Tera... (${cur}/${total})`,
+    teraDone: (n) => `Tera done! ${n} rooms registered`,
+    teraError: (name) => `Error: ${name}`,
   }
 };
 
 let currentLang = localStorage.getItem('scraperLang') || 'kr';
+let scannedRooms = [];
+
+chrome.storage.session.get('scannedRooms', (data) => {
+  if (data.scannedRooms && data.scannedRooms.length > 0) {
+    scannedRooms = data.scannedRooms;
+    setTeraStatus(`${scannedRooms.length}개 객실 로드됨`, "success");
+  }
+});
+
+const ROOM_TYPE_OPTIONS = [
+  "Junior Suite",
+  "Studio Room",
+  "Deluxe",
+  "Double",
+  "Executive",
+  "Single",
+  "Standard",
+  "Suite",
+  "Superior",
+  "Triple",
+  "Twin",
+];
+
+function matchRoomType(roomName) {
+  const name = roomName.toLowerCase();
+  for (const option of ROOM_TYPE_OPTIONS) {
+    if (name.includes(option.toLowerCase())) return option;
+  }
+  return "Standard";
+}
 
 function setLang(lang) {
   currentLang = lang;
@@ -45,6 +87,7 @@ function setLang(lang) {
   document.getElementById('startBtn').textContent = STRINGS[lang].startBtn;
   document.getElementById('hotelName').placeholder = STRINGS[lang].hotelNamePlaceholder;
   document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
+  document.getElementById('teraBtn').textContent = STRINGS[lang].teraBtn;
   const banner = document.getElementById('updateBanner');
   if (banner.dataset.version) {
     banner.textContent = STRINGS[lang].update(banner.dataset.version);
@@ -54,7 +97,7 @@ function setLang(lang) {
 function t() { return STRINGS[currentLang]; }
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyHBK7PHgEfx-cqeAgS68gMcfW2jGiDyAer3huebmICKFzr5t318hORDVqCDFo1UVDYoQ/exec";
-const CURRENT_VERSION = "4.4";
+const CURRENT_VERSION = "4.3";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
 
 async function checkForUpdates() {
@@ -80,7 +123,13 @@ function setStatus(msg, type = "") {
   console.log("[Scraper]", msg);
 }
 
-async function scrapeTab(tabId, includeHotelPhotos = false) {
+function setTeraStatus(msg, type = "") {
+  const el = document.getElementById("teraStatus");
+  el.textContent = msg;
+  el.className = type;
+}
+
+async function scrapeTab(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
@@ -205,6 +254,174 @@ function sanitizeName(name) {
   return name.replace(/[\\/:*?"<>|]/g, "_").trim();
 }
 
+// ── Tera Autofill ──
+async function teraFillOneRoom(tabId, room, roomType) {
+  // Step 1: Create New Room 클릭
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const divs = document.querySelectorAll('div');
+      for (const div of divs) {
+        if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) {
+          div.click();
+          return true;
+        }
+      }
+      return false;
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Step 2: Room type 드롭다운 열기
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const trigger = document.querySelector('[data-testid="select-rs-room-roomtype"]');
+      if (trigger) { trigger.click(); return true; }
+      return false;
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 1000));
+
+  // Step 3: Room type 옵션 선택
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (targetType) => {
+      const dropdown = document.querySelector('[data-testid="select-rs-room-roomtype-options"]');
+      if (!dropdown) return false;
+      const spans = dropdown.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.trim() === targetType) {
+          span.closest('div').click();
+          return true;
+        }
+      }
+      return false;
+    },
+    args: [roomType]
+  });
+
+  await new Promise(r => setTimeout(r, 800));
+
+  // Step 4: Room Size 입력
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (sizeText) => {
+      const match = sizeText.match(/[\d.]+/);
+      if (!match) return false;
+      const sizeVal = match[0];
+      const input = document.querySelector('[data-testid="input-rs-room-size"]');
+      if (!input) return false;
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeInputValueSetter.call(input, sizeVal);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    },
+    args: [room.sizeText || ""]
+  });
+
+  await new Promise(r => setTimeout(r, 500));
+
+  // Step 5: Unit 드롭다운 열기
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const trigger = document.querySelector('[data-testid="select-rs-room-unit"]');
+      if (trigger) { trigger.click(); return true; }
+      return false;
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 800));
+
+  // Step 6: sqm 선택
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const opts = document.querySelector('[data-testid="select-rs-room-unit-options"]');
+      if (!opts) return false;
+      const spans = opts.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.trim().toLowerCase() === 'sqm') {
+          span.closest('div').click();
+          return true;
+        }
+      }
+      return false;
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 500));
+
+  // Step 7: Window 드롭다운 열기
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const trigger = document.querySelector('[data-testid="select-rs-room-window"]');
+      if (trigger) { trigger.click(); return true; }
+      return false;
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 800));
+
+  // Step 8: Available / Not Available 선택
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (hasView) => {
+      const opts = document.querySelector('[data-testid="select-rs-room-window-options"]');
+      if (!opts) return false;
+      const target = hasView ? "Available" : "Not Available";
+      const spans = opts.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.trim() === target) {
+          span.closest('div').click();
+          return true;
+        }
+      }
+      return false;
+    },
+    args: [!!room.roomView]
+  });
+
+  await new Promise(r => setTimeout(r, 500));
+}
+
+document.getElementById("teraBtn").addEventListener("click", async () => {
+  if (scannedRooms.length === 0) {
+    setTeraStatus(t().teraNoRooms, "error");
+    return;
+  }
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab.url?.includes("traveloka.com")) {
+    setTeraStatus(t().teraNotTera, "error");
+    return;
+  }
+
+  const btn = document.getElementById("teraBtn");
+  btn.disabled = true;
+
+  try {
+    for (let i = 0; i < scannedRooms.length; i++) {
+      const room = scannedRooms[i];
+      const roomType = matchRoomType(room.roomName);
+      setTeraStatus(t().teraRunning(i + 1, scannedRooms.length));
+      await teraFillOneRoom(tab.id, room, roomType);
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setTeraStatus(t().teraDone(scannedRooms.length), "success");
+  } catch (err) {
+    setTeraStatus(t().teraError(err.message), "error");
+  }
+
+  btn.disabled = false;
+});
+
+// ── 스캔 버튼 ──
 document.getElementById("startBtn").addEventListener("click", async () => {
   const hotelId = document.getElementById("hotelId").value.trim();
   const hotelName = document.getElementById("hotelName").value.trim() || hotelId;
@@ -216,6 +433,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
   const btn = document.getElementById("startBtn");
   btn.disabled = true;
+  scannedRooms = [];
+  setTeraStatus("");
 
   try {
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -242,6 +461,9 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       btn.disabled = false;
       return;
     }
+
+    scannedRooms = finalRooms;
+    chrome.storage.session.set({ scannedRooms: finalRooms });
 
     setStatus(t().sending);
     await fetch(WEB_APP_URL, {
@@ -342,7 +564,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         a.href = zipUrl;
         a.download = `${sanitizeName(hotelName)}_photos.zip`;
         a.click();
-        URL.revokeObjectURL(zipUrl);
+        URL.revokeObjectURL(zipBlob);
         setStatus(t().done(finalRooms.length, photoCount), "success");
       } else {
         setStatus(t().noPhotos(finalRooms.length), "success");
