@@ -65,7 +65,6 @@ if (!window.__scrapeRoomsLoaded) {
     return { hotelId, cityId, checkIn, checkOut };
   };
 
-  // 페이지 HTML에서 seoHotelRooms 추출
   window.__extractSeoRoomData = function() {
     var targetScript = null;
     document.querySelectorAll('script').forEach(function(s) {
@@ -74,32 +73,32 @@ if (!window.__scrapeRoomsLoaded) {
     if (!targetScript) return null;
 
     var txt = targetScript.textContent;
-    var pidx = txt.indexOf('physicRoomMap');
-    if (pidx === -1) return null;
+    var start = txt.indexOf('[1,"') + 4;
+    var end = txt.lastIndexOf('\\n"])');
+    if (start < 4 || end < 0) return null;
 
-    var strStart = -1, strEnd = -1;
-    for (var i = pidx; i >= 0; i--) {
-      if (txt[i] === '"' && txt[i-1] !== '\\') { strStart = i + 1; break; }
+    var escaped = txt.slice(start, end);
+    var unescaped;
+    try {
+      unescaped = JSON.parse('"' + escaped + '"');
+    } catch(e) {
+      console.log("[Scraper] unescape failed:", e.message);
+      return null;
     }
-    for (var j = pidx; j < txt.length; j++) {
-      if (txt[j] === '"' && txt[j-1] !== '\\') { strEnd = j; break; }
+
+    var sidx = unescaped.indexOf('"seoHotelRooms":{');
+    if (sidx === -1) return null;
+
+    var depth = 0;
+    var k = sidx + '"seoHotelRooms":'.length;
+    var end2 = k;
+    for (; end2 < unescaped.length; end2++) {
+      if (unescaped[end2] === '{') depth++;
+      else if (unescaped[end2] === '}') { depth--; if (depth === 0) break; }
     }
-    if (strStart < 0 || strEnd < 0) return null;
 
     try {
-      var unescaped = JSON.parse('"' + txt.slice(strStart, strEnd) + '"');
-      var sidx = unescaped.indexOf('"seoHotelRooms":{');
-      if (sidx === -1) return null;
-
-      var depth = 0, end = sidx + '"seoHotelRooms":'.length;
-      for (var k = end; k < unescaped.length; k++) {
-        if (unescaped[k] === '{') depth++;
-        else if (unescaped[k] === '}') {
-          depth--;
-          if (depth === 0) { end = k + 1; break; }
-        }
-      }
-      return JSON.parse(unescaped.slice(sidx + '"seoHotelRooms":'.length, end));
+      return JSON.parse(unescaped.slice(k, end2 + 1));
     } catch(e) {
       console.log("[Scraper] seoHotelRooms parse error:", e.message);
       return null;
@@ -136,13 +135,9 @@ if (!window.__scrapeRoomsLoaded) {
       }
 
       var facilityTexts = [];
-      if (room.faciltityInfo && room.faciltityInfo.list) {
-        room.faciltityInfo.list.forEach(function(cat) {
-          if (cat.subList) {
-            cat.subList.forEach(function(item) {
-              if (item.title) facilityTexts.push(item.title);
-            });
-          }
+      if (room.baseFacilityInfo && room.baseFacilityInfo.length) {
+        room.baseFacilityInfo.forEach(function(item) {
+          if (item.name) facilityTexts.push(item.name);
         });
       }
       var facilityStr = window.__extractFacilities(facilityTexts);
@@ -158,27 +153,26 @@ if (!window.__scrapeRoomsLoaded) {
         else if (s.includes("smoking")) smoking = "YES";
       }
 
-      var roomView = "";
-      if (room.windowInfo && room.windowInfo.title) {
-        var t = room.windowInfo.title.toLowerCase();
-        if (t.includes("sea") || t.includes("ocean")) roomView = "SEA_VIEW";
-        else if (t.includes("city")) roomView = "CITY_VIEW";
-        else if (t.includes("mountain")) roomView = "MOUNTAIN_VIEW";
-        else if (t.includes("garden")) roomView = "GARDEN_VIEW";
-        else if (t.includes("pool")) roomView = "POOL_VIEW";
-        else if (t.includes("river")) roomView = "RIVER_VIEW";
-        else if (t.includes("park")) roomView = "PARK_VIEW";
-        else if (t.includes("lake")) roomView = "LAKE_VIEW";
-      }
+      var windowType = (room.windowInfo && room.windowInfo.type !== undefined) ? room.windowInfo.type : 0;
+
+      var roomView = "No Special View";
+      var nameLower = roomName.toLowerCase();
+      if (nameLower.includes("river")) roomView = "River View";
+      else if (nameLower.includes("sea") || nameLower.includes("ocean")) roomView = "Sea View";
+      else if (nameLower.includes("mountain")) roomView = "Mountain View";
+      else if (nameLower.includes("city")) roomView = "City View";
+      else if (nameLower.includes("garden")) roomView = "Garden View";
+      else if (nameLower.includes("pool")) roomView = "Pool View";
+      else if (nameLower.includes("lake")) roomView = "Lake View";
+      else if (nameLower.includes("park")) roomView = "Park View";
 
       var occupancy = occupancyMap[String(room.id)] || room.person || 2;
 
-      rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, smoking, roomPhotos });
+      rooms.push({ roomName, bedText, sizeText, facilityStr, occupancy, roomView, smoking, windowType, roomPhotos });
     });
     return rooms;
   };
 
-  // phantom-token 가로채기 (API fallback용)
   window.__phantomToken = "";
   (function() {
     var origFetch = window.fetch;
@@ -249,29 +243,19 @@ if (!window.__scrapeRoomsLoaded) {
   };
 
   window.__scrapeHotelPhotos = async function() {
-    var params = window.__parseUrlParams();
-    if (!params.hotelId) return [];
     try {
-      var res = await fetch(window.location.origin + "/restapi/soa2/33269/getHotelDetailAggregate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "accept": "application/json" },
-        body: JSON.stringify({
-          hotelId: params.hotelId,
-          cityId: params.cityId,
-          head: { platform: "PC", bu: "IBU", group: "trip", locale: "en-XX", currency: "USD" }
-        })
-      });
-      var data = await res.json();
-      if (data && data.data && data.data.hotelTopImage && data.data.hotelTopImage.imgUrlList) {
-        return data.data.hotelTopImage.imgUrlList.map(function(img) {
-          var highRes = img.diffPositionUrls && img.diffPositionUrls.find(function(u) { return u.position === 1; });
-          return highRes ? highRes.picUrl : img.imgUrl;
-        }).filter(Boolean);
-      }
+      var nd = window.__NEXT_DATA__;
+      var detail = nd && nd.props && nd.props.pageProps && nd.props.pageProps.hotelDetailResponse;
+      var imgs = (detail && detail.hotelStaticInfoResponse && detail.hotelStaticInfoResponse.hotelImages) || [];
+      return imgs
+        .filter(function(img) { return img.position === 1; })
+        .flatMap(function(img) {
+          return (img.diffPositionUrls || []).map(function(u) { return u.url; }).filter(Boolean);
+        });
     } catch(e) {
-      console.log("[Scraper] Hotel photo API error:", e.message);
+      console.log("[Scraper] Hotel photo error:", e.message);
+      return [];
     }
-    return [];
   };
 
   window.__getOffsetDates = function(offsetDays) {
@@ -289,13 +273,11 @@ if (!window.__scrapeRoomsLoaded) {
   window.__scrapeRooms = async function() {
     var rooms = [];
 
-    // 1순위: 페이지 HTML에서 seoHotelRooms 파싱
     var seoData = window.__extractSeoRoomData();
     if (seoData && seoData.physicRoomMap && Object.keys(seoData.physicRoomMap).length > 0) {
       console.log("[Scraper] Using seoHotelRooms, rooms:", Object.keys(seoData.physicRoomMap).length);
       rooms = window.__parsePhysicRoomMap(seoData.physicRoomMap, null);
     } else {
-      // 2순위: API fallback
       console.log("[Scraper] Falling back to API calls");
       var offsets = [0, 5, 10, 15, 20, 25, 30, 40, 45, 50, 55, 60];
       var apiResults = await Promise.all(offsets.map(function(offset) {
@@ -317,7 +299,6 @@ if (!window.__scrapeRoomsLoaded) {
       }
     }
 
-    // 호텔 전체 사진
     var hotelPhotos = await window.__scrapeHotelPhotos();
 
     window.__scrapeResult = { rooms, hotelPhotos };
