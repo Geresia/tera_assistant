@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Trip.com Room Scraper",
-  "version": "4.5",
+  "version": "5.0",
   "description": "Automatically scrape hotel room data from Trip.com and send to Google Sheets",
   "permissions": [
     "tabs",
     "scripting",
-    "storage"
+    "storage",
+    "sidePanel",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "https://www.trip.com/*",
@@ -18,12 +20,14 @@
     "https://tera.traveloka.com/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icon.png",
       "48": "icon.png",
       "128": "icon.png"
     }
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"

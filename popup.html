@@ -3,108 +3,192 @@
 <head>
   <meta charset="UTF-8">
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 260px;
-      padding: 16px;
-      font-family: sans-serif;
-      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      background: #fff;
+      color: #1d1d1f;
+      padding: 24px 20px;
+      width: 340px;
     }
+    #updateBanner {
+      display: none;
+      font-size: 11px;
+      font-weight: 500;
+      color: #aeaeb2;
+      text-align: right;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    #updateBanner::after { content: ' →'; }
+    #updateBanner:hover { color: #1d1d1f; }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 28px;
     }
-    h3 { margin: 0; font-size: 15px; }
+    .title { font-size: 19px; font-weight: 600; letter-spacing: -0.5px; color: #1d1d1f; }
+    .title em { font-style: normal; color: #0071e3; }
     .lang-toggle {
       display: flex;
-      gap: 4px;
+      background: #f5f5f7;
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
     }
     .lang-btn {
-      width: auto;
-      padding: 2px 8px;
-      font-size: 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
       cursor: pointer;
-      background: #f5f5f5;
-      color: #333;
-      margin: 0;
+      background: transparent;
+      color: #86868b;
+      transition: all 0.15s;
+      width: auto;
     }
     .lang-btn.active {
-      background: #1a73e8;
-      color: white;
-      border-color: #1a73e8;
+      background: #ffffff;
+      color: #1d1d1f;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .section { margin-bottom: 24px; }
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #aeaeb2;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .divider {
+      height: 0.5px;
+      background: #e5e5ea;
+      margin-bottom: 24px;
     }
     input {
       width: 100%;
-      padding: 6px 8px;
-      box-sizing: border-box;
-      margin-bottom: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 9px 12px;
+      border: 0.5px solid #d1d1d6;
+      border-radius: 10px;
       font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      transition: all 0.15s;
+      margin-bottom: 10px;
+    }
+    input:focus {
+      border-color: #0071e3;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(0,113,227,0.1);
+    }
+    input::placeholder { color: #aeaeb2; }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
     button {
-      width: 100%;
-      padding: 8px;
-      background: #1a73e8;
-      color: white;
+      padding: 10px;
       border: none;
-      border-radius: 4px;
+      border-radius: 10px;
       cursor: pointer;
       font-size: 13px;
-      margin-bottom: 6px;
+      font-weight: 500;
+      font-family: inherit;
+      transition: all 0.15s;
+      margin: 0;
     }
-    button:disabled { background: #aaa; cursor: not-allowed; }
-    #status {
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #0077ed; }
+    .btn-primary:active:not(:disabled) { transform: scale(0.98); }
+    .btn-dark { background: #1d1d1f; color: #fff; }
+    .btn-dark:hover:not(:disabled) { opacity: 0.82; }
+    .btn-dark:active:not(:disabled) { transform: scale(0.98); }
+    .status {
       margin-top: 10px;
       font-size: 12px;
-      color: #555;
-      min-height: 20px;
+      line-height: 1.5;
+      color: #86868b;
     }
-    .success { color: #1a7a1a; font-weight: bold; }
-    .error { color: #c00; }
-    hr { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-    #updateBanner {
+    .status.success { color: #1a7f4b; }
+    .status.error { color: #d93025; }
+    #pauseBox {
       display: none;
-      background: #e8a000;
-      color: white;
-      padding: 6px 8px;
-      border-radius: 4px;
-      margin-bottom: 10px;
-      cursor: pointer;
-      font-size: 12px;
+      padding-top: 4px;
     }
-    #teraBtn {
-      background: #0a7c47;
+    #pauseLabel {
+      font-size: 10px;
+      font-weight: 600;
+      color: #aeaeb2;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }
-    #teraBtn:disabled { background: #aaa; }
-    #teraStatus {
-      font-size: 12px;
-      color: #555;
-      min-height: 16px;
-      margin-top: 4px;
+    #pauseMsg {
+      font-size: 12.5px;
+      color: #1d1d1f;
+      margin-bottom: 12px;
+      line-height: 1.5;
     }
+    #continueBtn {
+      width: 100%;
+      background: #0071e3;
+      color: #fff;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #continueBtn:hover { background: #0077ed; }
   </style>
 </head>
 <body>
+
   <div id="updateBanner"></div>
+
   <div class="header">
-    <h3>Trip.com Room Scraper</h3>
+    <div class="title">Room <em>Scraper</em></div>
     <div class="lang-toggle">
       <button class="lang-btn active" id="btnKR">KR</button>
       <button class="lang-btn" id="btnEN">EN</button>
     </div>
   </div>
-  <input type="text" id="hotelId" placeholder="Hotel ID" />
-  <button id="startBtn"></button>
-  <hr>
-  <input type="text" id="hotelName" placeholder="" />
-  <div id="status"></div>
-  <hr>
-  <button id="teraBtn">Tera Autofill</button>
-  <div id="teraStatus"></div>
+
+  <div class="section">
+    <div class="section-label">Hotel Info</div>
+    <div class="btn-row">
+      <button class="btn-primary" id="extractBtn">Extract</button>
+      <button class="btn-dark" id="sheetBtn">Sheet</button>
+    </div>
+    <div id="extractStatus" class="status"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section">
+    <div class="section-label">Room</div>
+    <input type="text" id="hotelName" placeholder="" />
+    <div class="btn-row">
+      <button class="btn-primary" id="startBtn"></button>
+      <button class="btn-dark" id="teraBtn"></button>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="teraStatus" class="status"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div id="pauseBox">
+    <div id="pauseLabel">사진 업로드 완료 후</div>
+    <div id="pauseMsg"></div>
+    <button id="continueBtn">완료</button>
+  </div>
 
   <script src="jszip.min.js"></script>
   <script src="popup.js"></script>

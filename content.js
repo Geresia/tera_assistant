@@ -21,7 +21,29 @@ if (!window.__scrapeRoomsLoaded) {
     { keywords: ["connecting room", "interconnecting"], code: "INTERCONNECTING_ROOMS_AVAILABLE" },
     { keywords: ["shared bathroom"], code: "SHARED_BATHROOM" },
     { keywords: ["hot water", "heated water"], code: "HEATED_WATER" },
-    { keywords: ["slippers"], code: "SLIPPERS" },
+    { keywords: ["fan"], code: "FAN" },
+    { keywords: ["in room safe", "safe deposit"], code: "IN_ROOM_SAFE" },
+    { keywords: ["blackout curtain"], code: "BLACKOUT_CURTAINS" },
+    { keywords: ["clothes dryer"], code: "CLOTHES_DRYER" },
+    { keywords: ["dishwasher"], code: "DISHWASHER" },
+    { keywords: ["breakfast"], code: "BREAKFAST" },
+    { keywords: ["lunch"], code: "LUNCH" },
+    { keywords: ["dinner"], code: "DINNER" },
+    { keywords: ["daily newspaper", "newspaper"], code: "DAILY_NEWSPAPER" },
+    { keywords: ["in room video game", "video game"], code: "IN_ROOM_VIDEO_GAMES" },
+    { keywords: ["dvd", "cd player"], code: "DVD_CD_PLAYER" },
+    { keywords: ["inhouse movie", "in-house movie"], code: "INHOUSE_MOVIES" },
+    { keywords: ["executive lounge"], code: "EXECUTIVE_LOUNGE_ACCESS" },
+    { keywords: ["separate dining"], code: "SEPARATE_DINING_AREA" },
+    { keywords: ["seating area"], code: "SEATING_AREA" },
+    { keywords: ["kitchenette"], code: "KITCHENETTE" },
+    { keywords: ["private pool"], code: "PRIVATE_POOL" },
+    { keywords: ["toiletries"], code: "TOILETRIES" },
+    { keywords: ["private bathroom"], code: "PRIVATE_BATHROOM" },
+    { keywords: ["mosquito net"], code: "MOSQUITO_NET" },
+    { keywords: ["internet access lan complimentary", "lan complimentary"], code: "INTERNET_ACCESS_LAN_COMPLIMENTARY" },
+    { keywords: ["internet access lan charges", "lan charges"], code: "INTERNET_ACCESS_LAN_CHARGES_APPLY" },
+    { keywords: ["internet access wifi charges", "wifi charges"], code: "INTERNET_ACCESS_WIFI_CHARGES_APPLY" },
   ];
 
   window.__extractFacilities = function(texts) {
@@ -157,14 +179,42 @@ if (!window.__scrapeRoomsLoaded) {
 
       var roomView = "No Special View";
       var nameLower = roomName.toLowerCase();
-      if (nameLower.includes("river")) roomView = "River View";
-      else if (nameLower.includes("sea") || nameLower.includes("ocean")) roomView = "Sea View";
-      else if (nameLower.includes("mountain")) roomView = "Mountain View";
+      if (nameLower.includes("airport")) roomView = "Airport View";
+      else if (nameLower.includes("bay")) roomView = "Bay View";
+      else if (nameLower.includes("beach")) roomView = "Beach View";
       else if (nameLower.includes("city")) roomView = "City View";
+      else if (nameLower.includes("countryside")) roomView = "Countryside View";
+      else if (nameLower.includes("country")) roomView = "Country View";
+      else if (nameLower.includes("courtyard")) roomView = "Courtyard View";
+      else if (nameLower.includes("forest")) roomView = "Forest View";
       else if (nameLower.includes("garden")) roomView = "Garden View";
-      else if (nameLower.includes("pool")) roomView = "Pool View";
+      else if (nameLower.includes("golf")) roomView = "Golf View";
+      else if (nameLower.includes("gulf")) roomView = "Gulf View";
+      else if (nameLower.includes("harbor")) roomView = "Harbor View";
+      else if (nameLower.includes("lagoon")) roomView = "Lagoon View";
+      else if (nameLower.includes("lake partial")) roomView = "Lake Partial View";
       else if (nameLower.includes("lake")) roomView = "Lake View";
+      else if (nameLower.includes("marina")) roomView = "Marina View";
+      else if (nameLower.includes("mountain")) roomView = "Mountain View";
+      else if (nameLower.includes("nature")) roomView = "Nature View";
+      else if (nameLower.includes("night")) roomView = "Night View";
+      else if (nameLower.includes("ocean partial")) roomView = "Ocean Partial View";
+      else if (nameLower.includes("ocean")) roomView = "Ocean View";
       else if (nameLower.includes("park")) roomView = "Park View";
+      else if (nameLower.includes("pool")) roomView = "Pool View";
+      else if (nameLower.includes("rain forest")) roomView = "Rain Forest View";
+      else if (nameLower.includes("river")) roomView = "River View";
+      else if (nameLower.includes("sea partial")) roomView = "Sea Partial View";
+      else if (nameLower.includes("sea")) roomView = "Sea View";
+      else if (nameLower.includes("slope")) roomView = "Slope View";
+      else if (nameLower.includes("street")) roomView = "Street View";
+      else if (nameLower.includes("valley")) roomView = "Valley View";
+      else if (nameLower.includes("water")) roomView = "Water View";
+      else if (nameLower.includes("tower")) roomView = "Tower View";
+      else if (nameLower.includes("hill")) roomView = "Hill View";
+      else if (nameLower.includes("seafront")) roomView = "Seafront";
+      else if (nameLower.includes("beachfront")) roomView = "Beachfront";
+      else if (nameLower.includes("panoramic")) roomView = "Panoramic";
 
       var occupancy = occupancyMap[String(room.id)] || room.person || 2;
 
@@ -246,12 +296,11 @@ if (!window.__scrapeRoomsLoaded) {
     try {
       var nd = window.__NEXT_DATA__;
       var detail = nd && nd.props && nd.props.pageProps && nd.props.pageProps.hotelDetailResponse;
-      var imgs = (detail && detail.hotelStaticInfoResponse && detail.hotelStaticInfoResponse.hotelImages) || [];
-      return imgs
-        .filter(function(img) { return img.position === 1; })
-        .flatMap(function(img) {
-          return (img.diffPositionUrls || []).map(function(u) { return u.url; }).filter(Boolean);
-        });
+      var imgList = (detail && detail.hotelTopImage && detail.hotelTopImage.imgUrlList) || [];
+      return imgList.flatMap(function(img) {
+        var pos1 = (img.diffPositionUrls || []).find(function(u) { return u.position === 1; });
+        return pos1 ? [pos1.picUrl] : (img.imgUrl ? [img.imgUrl] : []);
+      }).filter(Boolean);
     } catch(e) {
       console.log("[Scraper] Hotel photo error:", e.message);
       return [];
