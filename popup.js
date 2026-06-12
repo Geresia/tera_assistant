@@ -811,6 +811,7 @@ document.getElementById("teraBtn").addEventListener("click", async () => {
 
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
+        world: "MAIN",
         func: () => {
           const btn = document.querySelector('[data-testid="button-mainform-submit"]');
           if (btn) { btn.click(); return true; }
@@ -1582,109 +1583,115 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
     return;
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => {
-      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz384ObCq18jDZIpzbmTDOQOSO00a62xS7urqFoIV1ksyxhPz3-rkpkcn6KCf6OEGGG/exec";
-      const hotelFacilityMap = [
-        {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},
-        {keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
-        {keywords:["private pool"],code:"PRIVATE_POOL"},
-        {keywords:["shower"],code:"SHOWER"},
-        {keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
-        {keywords:["bathtub"],code:"BATHTUB"},
-        {keywords:["hot water","heated water"],code:"HEATED_WATER"},
-        {keywords:["air conditioning"],code:"AIR_CONDITIONING"},
-        {keywords:["hair dryer"],code:"HAIR_DRYER"},
-        {keywords:["desk"],code:"DESK"},
-        {keywords:["free wi-fi","wi-fi in public","wi-fi in room","wifi","free internet"],code:"INTERNET_ACCESS_WIFI_COMPLIMENTARY"},
-        {keywords:["microwave"],code:"MICROWAVE"},
-        {keywords:["washing machine"],code:"WASHING_MACHINE"},
-        {keywords:["iron","ironing"],code:"IRONING_FACILITIES"},
-        {keywords:["shared bathroom"],code:"SHARED_BATHROOM"},
-        {keywords:["television","lcd tv"],code:"TELEVISION"},
-        {keywords:["refrigerator"],code:"REFRIGERATOR"},
-        {keywords:["mini bar","minibar"],code:"MINI_BAR"},
-        {keywords:["electric kettle","coffee","tea"],code:"COFFEE_TEA_MAKER"},
-        {keywords:["bottled water"],code:"COMPLIMENTARY_BOTTLED_WATER"}
-      ];
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      func: () => {
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz384ObCq18jDZIpzbmTDOQOSO00a62xS7urqFoIV1ksyxhPz3-rkpkcn6KCf6OEGGG/exec";
+        const hotelFacilityMap = [
+          {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},
+          {keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
+          {keywords:["private pool"],code:"PRIVATE_POOL"},
+          {keywords:["shower"],code:"SHOWER"},
+          {keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
+          {keywords:["bathtub"],code:"BATHTUB"},
+          {keywords:["hot water","heated water"],code:"HEATED_WATER"},
+          {keywords:["air conditioning"],code:"AIR_CONDITIONING"},
+          {keywords:["hair dryer"],code:"HAIR_DRYER"},
+          {keywords:["desk"],code:"DESK"},
+          {keywords:["free wi-fi","wi-fi in public","wi-fi in room","wifi","free internet"],code:"INTERNET_ACCESS_WIFI_COMPLIMENTARY"},
+          {keywords:["microwave"],code:"MICROWAVE"},
+          {keywords:["washing machine"],code:"WASHING_MACHINE"},
+          {keywords:["iron","ironing"],code:"IRONING_FACILITIES"},
+          {keywords:["shared bathroom"],code:"SHARED_BATHROOM"},
+          {keywords:["television","lcd tv"],code:"TELEVISION"},
+          {keywords:["refrigerator"],code:"REFRIGERATOR"},
+          {keywords:["mini bar","minibar"],code:"MINI_BAR"},
+          {keywords:["electric kettle","coffee","tea"],code:"COFFEE_TEA_MAKER"},
+          {keywords:["bottled water"],code:"COMPLIMENTARY_BOTTLED_WATER"}
+        ];
 
-      function extractFacilities(list) {
-        const texts = [];
-        list.forEach(cat => {
-          if (cat.title) texts.push(cat.title.toLowerCase());
-          if (cat.categoryList) cat.categoryList.forEach(g => {
-            if (g.list) g.list.forEach(item => {
-              if (item.facilityDesc) texts.push(item.facilityDesc.toLowerCase());
+        function extractFacilities(list) {
+          const texts = [];
+          list.forEach(cat => {
+            if (cat.title) texts.push(cat.title.toLowerCase());
+            if (cat.categoryList) cat.categoryList.forEach(g => {
+              if (g.list) g.list.forEach(item => {
+                if (item.facilityDesc) texts.push(item.facilityDesc.toLowerCase());
+              });
             });
           });
+          const combined = texts.join(" ");
+          const result = [];
+          hotelFacilityMap.forEach(item => {
+            if (item.keywords.some(k => combined.includes(k)) && !result.includes(item.code))
+              result.push(item.code);
+          });
+          return result.join(", ");
+        }
+
+        const scripts = [...document.querySelectorAll('script')];
+        const text = scripts.map(s => s.innerText).join(' ');
+        const coords = text.match(/(\d{2,3}\.\d{4,})[^\d.]{1,30}(\d{2,3}\.\d{4,})/);
+        const lat = coords ? parseFloat(coords[1]).toFixed(4) : "";
+        const lng = coords ? parseFloat(coords[2]).toFixed(4) : "";
+        const hotelName = document.querySelector('h1')?.innerText.trim() || "";
+        const addressEl = document.querySelector('[class*="address"],[class*="Address"]');
+        const rawAddress = addressEl ? addressEl.innerText.trim().replace(/show on map/gi, "").trim() : "";
+        const addressParts = rawAddress.split(",").map(p => p.trim()).filter(Boolean);
+        const filtered = addressParts.filter(p => !/^\d{4,}$/.test(p) && !/south korea|korea|japan|thailand|indonesia|singapore|malaysia|vietnam|philippines|taiwan|china|australia|india|united arab emirates|saudi|new zealand|fiji|macau|hong kong/i.test(p));
+        const address = filtered.reverse().join(", ");
+        const starEl = document.querySelector('[class*="hotelStarLevel"]');
+        const starRating = starEl ? (starEl.getAttribute('aria-label') || "0") : "0";
+        const policyEls = document.querySelectorAll('[class*="hotelPolicyNew_hotelPolicy-check_desc"]');
+        const checkInRaw = policyEls[0] ? policyEls[0].innerText.trim() : "";
+        const checkOutRaw = policyEls[1] ? policyEls[1].innerText.trim() : "";
+        const checkIn = checkInRaw.match(/\d{1,2}:\d{2}/) ? checkInRaw.match(/\d{1,2}:\d{2}/)[0] : "14:00";
+        const checkOut = checkOutRaw.match(/\d{1,2}:\d{2}/) ? checkOutRaw.match(/\d{1,2}:\d{2}/)[0] : "12:00";
+        const a = rawAddress.toLowerCase();
+        let currency = "KRW";
+        if (/japan/.test(a)) currency = "JPY";
+        else if (/hong kong/.test(a)) currency = "HKD";
+        else if (/thailand/.test(a)) currency = "THB";
+        else if (/indonesia/.test(a)) currency = "IDR";
+        else if (/singapore/.test(a)) currency = "SGD";
+        else if (/malaysia/.test(a)) currency = "MYR";
+        else if (/vietnam/.test(a)) currency = "VND";
+        else if (/philippines/.test(a)) currency = "PHP";
+        else if (/taiwan/.test(a)) currency = "TWD";
+        else if (/china/.test(a)) currency = "CNY";
+        else if (/australia/.test(a)) currency = "AUD";
+        else if (/india/.test(a)) currency = "INR";
+        else if (/united arab emirates|uae/.test(a)) currency = "AED";
+        else if (/saudi/.test(a)) currency = "SAR";
+        else if (/new zealand/.test(a)) currency = "NZD";
+        else if (/fiji/.test(a)) currency = "FJD";
+        else if (/macau|macao/.test(a)) currency = "MOP";
+        const n = hotelName.toLowerCase();
+        let accommodationType = "HOTEL";
+        if (/resort/.test(n)) accommodationType = "RESORT";
+        else if (/hostel|backpacker/.test(n)) accommodationType = "HOSTEL_BACKPACKER_ACCOMMODATION";
+        else if (/villa/.test(n)) accommodationType = "VILLA";
+        else if (/apartment|apart/.test(n)) accommodationType = "APARTMENT";
+        else if (/capsule/.test(n)) accommodationType = "CAPSULE_HOTEL";
+        else if (/aparthotel/.test(n)) accommodationType = "APARTHOTEL";
+        else if (/guesthouse|guest house/.test(n)) accommodationType = "GUESTHOUSE";
+        const nd = window.__NEXT_DATA__;
+        const facilityData = nd?.props?.pageProps?.hotelDetailResponse?.hotelFacilityPopV2?.hotelFacility;
+        const hotelFacilities = facilityData ? extractFacilities(facilityData) : "";
+        fetch(HOTEL_WEB_APP_URL, {
+          method: "POST", mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities })
         });
-        const combined = texts.join(" ");
-        const result = [];
-        hotelFacilityMap.forEach(item => {
-          if (item.keywords.some(k => combined.includes(k)) && !result.includes(item.code))
-            result.push(item.code);
-        });
-        return result.join(", ");
+        return { hotelName, hotelFacilities };
       }
+    });
 
-      const scripts = [...document.querySelectorAll('script')];
-      const text = scripts.map(s => s.innerText).join(' ');
-      const coords = text.match(/(\d{2,3}\.\d{4,})[^\d.]{1,30}(\d{2,3}\.\d{4,})/);
-      const lat = coords ? parseFloat(coords[1]).toFixed(4) : "";
-      const lng = coords ? parseFloat(coords[2]).toFixed(4) : "";
-      const hotelName = document.querySelector('h1')?.innerText.trim() || "";
-      const addressEl = document.querySelector('[class*="address"],[class*="Address"]');
-      const rawAddress = addressEl ? addressEl.innerText.trim().replace(/show on map/gi, "").trim() : "";
-      const addressParts = rawAddress.split(",").map(p => p.trim()).filter(Boolean);
-      const filtered = addressParts.filter(p => !/^\d{4,}$/.test(p) && !/south korea|korea|japan|thailand|indonesia|singapore|malaysia|vietnam|philippines|taiwan|china|australia|india|united arab emirates|saudi|new zealand|fiji|macau|hong kong/i.test(p));
-      const address = filtered.reverse().join(", ");
-      const starEl = document.querySelector('[class*="hotelStarLevel"]');
-      const starRating = starEl ? (starEl.getAttribute('aria-label') || "0") : "0";
-      const policyEls = document.querySelectorAll('[class*="hotelPolicyNew_hotelPolicy-check_desc"]');
-      const checkInRaw = policyEls[0] ? policyEls[0].innerText.trim() : "";
-      const checkOutRaw = policyEls[1] ? policyEls[1].innerText.trim() : "";
-      const checkIn = checkInRaw.match(/\d{1,2}:\d{2}/) ? checkInRaw.match(/\d{1,2}:\d{2}/)[0] : "14:00";
-      const checkOut = checkOutRaw.match(/\d{1,2}:\d{2}/) ? checkOutRaw.match(/\d{1,2}:\d{2}/)[0] : "12:00";
-      const a = rawAddress.toLowerCase();
-      let currency = "KRW";
-      if (/japan/.test(a)) currency = "JPY";
-      else if (/hong kong/.test(a)) currency = "HKD";
-      else if (/thailand/.test(a)) currency = "THB";
-      else if (/indonesia/.test(a)) currency = "IDR";
-      else if (/singapore/.test(a)) currency = "SGD";
-      else if (/malaysia/.test(a)) currency = "MYR";
-      else if (/vietnam/.test(a)) currency = "VND";
-      else if (/philippines/.test(a)) currency = "PHP";
-      else if (/taiwan/.test(a)) currency = "TWD";
-      else if (/china/.test(a)) currency = "CNY";
-      else if (/australia/.test(a)) currency = "AUD";
-      else if (/india/.test(a)) currency = "INR";
-      else if (/united arab emirates|uae/.test(a)) currency = "AED";
-      else if (/saudi/.test(a)) currency = "SAR";
-      else if (/new zealand/.test(a)) currency = "NZD";
-      else if (/fiji/.test(a)) currency = "FJD";
-      else if (/macau|macao/.test(a)) currency = "MOP";
-      const n = hotelName.toLowerCase();
-      let accommodationType = "HOTEL";
-      if (/resort/.test(n)) accommodationType = "RESORT";
-      else if (/hostel|backpacker/.test(n)) accommodationType = "HOSTEL_BACKPACKER_ACCOMMODATION";
-      else if (/villa/.test(n)) accommodationType = "VILLA";
-      else if (/apartment|apart/.test(n)) accommodationType = "APARTMENT";
-      else if (/capsule/.test(n)) accommodationType = "CAPSULE_HOTEL";
-      else if (/aparthotel/.test(n)) accommodationType = "APARTHOTEL";
-      else if (/guesthouse|guest house/.test(n)) accommodationType = "GUESTHOUSE";
-      const nd = window.__NEXT_DATA__;
-      const facilityData = nd?.props?.pageProps?.hotelDetailResponse?.hotelFacilityPopV2?.hotelFacility;
-      const hotelFacilities = facilityData ? extractFacilities(facilityData) : "";
-      fetch(HOTEL_WEB_APP_URL, {
-        method: "POST", mode: "no-cors",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities })
-      });
-      alert("Sent: " + hotelName + "\nFacilities: " + hotelFacilities);
-    }
-  });
-
-  setExtractStatus(currentLang === 'kr' ? "Sheet로 전송됨" : "Sent to Sheet", "success");
+    const r = results?.[0]?.result;
+    setExtractStatus(`${r?.hotelName || ''} | ${r?.hotelFacilities || '없음'}`, "success");
+  } catch(e) {
+    setExtractStatus("Error: " + e.message, "error");
+  }
 });
