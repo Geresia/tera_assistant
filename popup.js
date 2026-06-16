@@ -1,59 +1,68 @@
+// ── Strings ──
 const STRINGS = {
   kr: {
-    startBtn: "스캔",
+    startBtn: "Room Scan",
     hotelNamePlaceholder: "호텔 이름 입력 (사진용)",
     defaultStatus: "Trip.com 호텔 페이지에서 실행하세요.",
     notTripPage: "Trip.com 호텔 페이지에서 실행하세요.",
     scan1: "스캔 중...",
-    scan1done: (total, photos) => `완료: ${total}개 객실 | 호텔사진: ${photos}장`,
+    scan1done: (n, p) => `완료: ${n}개 객실 | 호텔사진: ${p}장`,
     noRooms: "객실을 찾지 못했습니다.",
     zipping: "사진 ZIP 생성 중...",
-    done: (rooms, photos) => `완료! 객실 ${rooms}개 + 사진 ${photos}장`,
+    done: (r, p) => `완료! 객실 ${r}개 + 사진 ${p}장`,
     noPhotos: (n) => `완료! 총 ${n}개 객실 (사진 없음)`,
     noJszip: (n) => `완료! 총 ${n}개 객실 (JSZip 없음)`,
     update: (v) => `v${v} 업데이트 해주세요`,
     teraBtn: "Autofill",
     teraNoRooms: "먼저 스캔을 실행하세요.",
     teraNotTera: "tera.traveloka.com 페이지에서 실행하세요.",
-    teraRunning: (cur, total) => `입력 중... (${cur}/${total})`,
+    teraRunning: (c, t) => `입력 중... (${c}/${t})`,
     teraDone: (n) => `완료! ${n}개 객실 등록`,
-    teraError: (name) => `오류: ${name}`,
-    extractBtn: "스캔",
+    teraError: (e) => `오류: ${e}`,
+    extractBtn: "Hotel Scan for Tera",
     extracting: "스캔 중...",
-    extractDone: (name) => `완료: ${name}`,
+    extractDone: (n) => `완료: ${n}`,
     extractFail: "스캔 실패",
     extractNotTrip: "Trip.com 호텔 페이지에서 실행하세요.",
+    hotelInsertBtn: "Hotel Detail Insert",
+    hotelInsertNoData: "먼저 Hotel Scan을 실행하세요.",
+    hotelInsertNotTera: "tera.traveloka.com 페이지에서 실행하세요.",
     hotelAutofillDetails: "Details 입력 중...",
+    hotelAutofillFacilities: "Facilities 입력 중...",
     hotelAutofillOverview: "Overview 입력 중...",
     hotelAutofillAddress: "Address 입력 중...",
     hotelAutofillDone: "완료!",
     hotelAutofillReload: "페이지 리로드됨 - 다시 시도해주세요.",
   },
   en: {
-    startBtn: "Scan",
+    startBtn: "Room Scan",
     hotelNamePlaceholder: "Enter Hotel Name (for photos)",
     defaultStatus: "Run this on a Trip.com hotel page.",
     notTripPage: "Please run this on a Trip.com hotel page.",
     scan1: "Scanning...",
-    scan1done: (total, photos) => `Done: ${total} rooms | Photos: ${photos}`,
+    scan1done: (n, p) => `Done: ${n} rooms | Photos: ${p}`,
     noRooms: "No rooms found.",
     zipping: "Creating ZIP...",
-    done: (rooms, photos) => `Done! ${rooms} rooms + ${photos} photos`,
+    done: (r, p) => `Done! ${r} rooms + ${p} photos`,
     noPhotos: (n) => `Done! ${n} rooms (no photos)`,
     noJszip: (n) => `Done! ${n} rooms (JSZip missing)`,
     update: (v) => `v${v} update available`,
     teraBtn: "Autofill",
     teraNoRooms: "Please scan first.",
     teraNotTera: "Please open tera.traveloka.com first.",
-    teraRunning: (cur, total) => `Filling... (${cur}/${total})`,
+    teraRunning: (c, t) => `Filling... (${c}/${t})`,
     teraDone: (n) => `Done! ${n} rooms registered`,
-    teraError: (name) => `Error: ${name}`,
-    extractBtn: "Extract",
+    teraError: (e) => `Error: ${e}`,
+    extractBtn: "Hotel Scan for Tera",
     extracting: "Extracting...",
-    extractDone: (name) => `Done: ${name}`,
+    extractDone: (n) => `Done: ${n}`,
     extractFail: "Extraction failed.",
     extractNotTrip: "Please open a Trip.com hotel page.",
+    hotelInsertBtn: "Hotel Detail Insert",
+    hotelInsertNoData: "Please run Hotel Scan first.",
+    hotelInsertNotTera: "Please open tera.traveloka.com first.",
     hotelAutofillDetails: "Filling Details...",
+    hotelAutofillFacilities: "Filling Facilities...",
     hotelAutofillOverview: "Filling Overview...",
     hotelAutofillAddress: "Filling Address...",
     hotelAutofillDone: "Done!",
@@ -61,32 +70,160 @@ const STRINGS = {
   }
 };
 
-let currentLang = localStorage.getItem('scraperLang') || 'kr';
-let scannedRooms = [];
+// ── State ──
+let currentLang = localStorage.getItem('teraLang') || 'kr';
+let roomData = [];
+let currentHotelData = null;
+let isPaused = false;
+let pauseResolve = null;
 
-chrome.storage.session.get('scannedRooms', (data) => {
-  if (data.scannedRooms && data.scannedRooms.length > 0) {
-    scannedRooms = data.scannedRooms;
-    setTeraStatus(`${scannedRooms.length}개 객실 로드됨`, "success");
+chrome.storage.session.get('roomData', (data) => {
+  if (data.roomData?.length > 0) {
+    roomData = data.roomData;
+    setTeraStatus(`${roomData.length}개 객실 로드됨`, "success");
   }
 });
+
+// ── Constants ──
+const CURRENT_VERSION = "5.1";
+const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 
 const ROOM_TYPE_OPTIONS = [
   "Junior Suite", "Studio Room", "Deluxe", "Double", "Executive",
   "Single", "Standard", "Suite", "Superior", "Triple", "Twin",
 ];
 
-function matchRoomType(roomName) {
-  const name = roomName.toLowerCase();
-  for (const option of ROOM_TYPE_OPTIONS) {
-    if (name.includes(option.toLowerCase())) return option;
+const BED_TYPE_MAP = {
+  king: 'King', queen: 'Queen', single: 'Single', double: 'Double',
+  twin: 'Twin', bunk: 'Bunk', capsule: 'Capsule', mattress: 'Mattress',
+  sofa: 'Sofa', futon: 'Mattress',
+};
+
+const COUNTRY_LOCALE_MAP = {
+  "south korea": "ko-KR", korea: "ko-KR",
+  japan: "ja-JP", china: "zh-CN", "hong kong": "zh-HK",
+  indonesia: "id-ID", vietnam: "vi-VN", thailand: "th-TH",
+  philippines: "en-PH", malaysia: "ms-MY", singapore: "en-SG",
+};
+
+const TARGET_W = 1280, TARGET_H = 720, NEAR_THRESHOLD = 0.3, MAX_W = 4096, MAX_H = 4096;
+
+// ── Hotel Facility Map ──
+const HOTEL_FACILITY_MAP = [
+  { codes: [102], teraValues: ["WIFI_PUBLIC_AREA", "WIFI_FREE"] },
+  { codes: [656], teraValues: ["CARPARK"] },
+  { codes: [149], teraValues: ["VALET_PARKING"] },
+  { codes: [681], teraValues: ["CARPARK"] },
+  { codes: [55],  teraValues: ["TRANSFER_SERVICE"] },
+  { codes: [105, 361], teraValues: ["AIRPORT_TRANSFER"] },
+  { codes: [133], teraValues: ["AREA_SHUTTLE"] },
+  { codes: [123], teraValues: ["CAR_HIRE"] },
+  { codes: [152], teraValues: ["BICYCLE_HIRE_SERVICE"] },
+  { codes: [147], teraValues: ["RESTAURANT", "RESTAURANT_FOR_BREAKFAST", "RESTAURANT_FOR_LUNCH", "RESTAURANT_FOR_DINNER"] },
+  { codes: [3],   teraValues: ["CAFE", "COFFEE_SHOP"] },
+  { codes: [5, 106], teraValues: ["BAR"] },
+  { codes: [16],  teraValues: ["ROOM_SERVICE", "HAS_24_HOUR_ROOM_SERVICE"] },
+  { codes: [578], teraValues: ["SNACK_BAR"] },
+  { codes: [579, 161], teraValues: ["GIFT_SHOP"] },
+  { codes: [63],  teraValues: ["COFFEE_SHOP"] },
+  { codes: [6, 164], teraValues: ["CONFERENCE_ROOM", "MEETING_FACILITIES"] },
+  { codes: [137], teraValues: ["WEDDING_SERVICE"] },
+  { codes: [168], teraValues: ["SECRETARIAL_SERVICE"] },
+  { codes: [577], teraValues: ["BUSINESS_CENTER"] },
+  { codes: [129], teraValues: ["PHOTOCOPIER"] },
+  { codes: [176], teraValues: ["PROJECTOR"] },
+  { codes: [174, 175], teraValues: ["BUSINESS_CENTER"] },
+  { codes: [127], teraValues: ["CONCIERGE"] },
+  { codes: [95],  teraValues: ["SAFETY_DEPOSIT_BOX"] },
+  { codes: [96],  teraValues: ["PORTER", "BELLBOY_SERVICE"] },
+  { codes: [97],  teraValues: ["LUGGAGE_STORAGE"] },
+  { codes: [98],  teraValues: ["FRONT_DESK"] },
+  { codes: [11],  teraValues: ["CURRENCY_EXCHANGE"] },
+  { codes: [143, 131], teraValues: ["EXPRESS_CHECK_IN", "EXPRESS_CHECK_OUT"] },
+  { codes: [12],  teraValues: ["TOURS"] },
+  { codes: [576], teraValues: ["TOURS"] },
+  { codes: [35],  teraValues: ["SHOPS"] },
+  { codes: [99],  teraValues: ["ATM_OR_BANKING"] },
+  { codes: [110], teraValues: ["ELEVATOR"] },
+  { codes: [141], teraValues: ["SMOKING_FREE", "NON_SMOKING_ROOM"] },
+  { codes: [142], teraValues: ["SMOKING_AREA"] },
+  { codes: [173], teraValues: ["NON_SMOKING_ROOM"] },
+  { codes: [157], teraValues: ["LIBRARY"] },
+  { codes: [384, 385], teraValues: ["GARDEN"] },
+  { codes: [42],  teraValues: ["FITNESS_CENTER", "FITNESS"] },
+  { codes: [65, 633], teraValues: ["SPA"] },
+  { codes: [43, 425], teraValues: ["MASSAGE"] },
+  { codes: [44],  teraValues: ["SAUNA"] },
+  { codes: [664], teraValues: ["SPA_TUB", "HOT_TUB"] },
+  { codes: [41, 419, 420, 421, 422], teraValues: ["HAIR_SALON", "BEAUTY_SALON"] },
+  { codes: [47],  teraValues: ["SOLARIUM"] },
+  { codes: [438], teraValues: ["FITNESS"] },
+  { codes: [27],  teraValues: ["TABLE_TENNIS"] },
+  { codes: [31],  teraValues: ["TENNIS", "OUTDOOR_TENNIS_COURT"] },
+  { codes: [30],  teraValues: ["BOWLING_ALLEY"] },
+  { codes: [22],  teraValues: ["KARAOKE"] },
+  { codes: [151], teraValues: ["CASINO"] },
+  { codes: [15, 178, 128, 130], teraValues: ["LAUNDRY_SERVICE"] },
+  { codes: [362], teraValues: ["LAUNDERETTE"] },
+  { codes: [343], teraValues: ["CLOTHES_DRYER"] },
+  { codes: [68],  teraValues: ["CHILDREN_PLAY_AREA"] },
+  { codes: [365], teraValues: ["BABYSITTING"] },
+  { codes: [330, 331, 332, 333], teraValues: ["BABYSITTING"] },
+  { codes: [334, 368], teraValues: ["CHILDREN_CLUB"] },
+  { codes: [575], teraValues: ["WHEELCHAIR_ACCESSIBLE"] },
+  { codes: [19],  teraValues: ["IN_ROOM_ACCESSIBILITY", "ACCESSIBLE_BATHROOM"] },
+  { codes: [567, 568], teraValues: ["ACCESSIBILITY_EQUIPMENT"] },
+  { codes: [570], teraValues: ["ROLL_IN_SHOWER"] },
+  { codes: [573], teraValues: ["ACCESSIBLE_PATH_OF_TRAVEL"] },
+  { codes: [177, 479, 344, 347, 350, 353, 371, 372, 513, 40], teraValues: ["HAS_24_HOUR_SECURITY"] },
+  { keywords: ["rooftop pool", "infinity pool", "outdoor pool", "outdoor swimming", "saltwater pool", "pool with view"], teraValues: ["OUTDOOR_POOL", "POOL"] },
+  { keywords: ["indoor pool", "indoor swimming"], teraValues: ["INDOOR_POOL", "POOL"] },
+  { keywords: ["heated pool"], teraValues: ["OUTDOOR_HEATED_POOL", "POOL"] },
+  { keywords: ["children pool", "kids pool", "children's pool"], teraValues: ["CHILDREN_POOL"] },
+  { keywords: ["pool bar", "swim up bar", "swimup"], teraValues: ["SWIMUP_BAR"] },
+  { keywords: ["hot tub", "jacuzzi"], teraValues: ["HOT_TUB", "SPA_TUB"] },
+  { keywords: ["hot spring"], teraValues: ["HOT_TUB"] },
+  { keywords: ["steam room", "steamroom"], teraValues: ["STEAMROOM", "STEAM_BATH"] },
+  { keywords: ["private beach"], teraValues: ["PRIVATE_BEACH"] },
+  { keywords: ["public beach"], teraValues: ["PRIVATE_BEACH_NEARBY"] },
+  { keywords: ["barbecue", "bbq"], teraValues: ["BARBECUE_GRILL"] },
+  { keywords: ["water park"], teraValues: ["WATER_PARK_ACCESS"] },
+  { keywords: ["waterslide"], teraValues: ["WATERSLIDE"] },
+  { keywords: ["pets allowed", "pets welcome"], teraValues: ["PETS_ALLOWED"] },
+  { keywords: ["golf course"], teraValues: ["GOLF_COURSE"] },
+  { keywords: ["beach bar"], teraValues: ["BEACH_BAR"] },
+  { keywords: ["nightclub"], teraValues: ["NIGHTCLUB"] },
+  { keywords: ["billiard", "snooker"], teraValues: ["BILLIARDS"] },
+  { keywords: ["ski"], teraValues: ["SKI"] },
+  { keywords: ["marina"], teraValues: ["MARINA"] },
+  { keywords: ["turkish bath", "hammam"], teraValues: ["TURKISH_BATH"] },
+];
+
+function getTeraFacilities(tripFacilities) {
+  const result = new Set();
+  for (const item of tripFacilities) {
+    for (const mapping of HOTEL_FACILITY_MAP) {
+      if (mapping.codes && item.code && mapping.codes.includes(item.code)) {
+        mapping.teraValues.forEach(v => result.add(v));
+      }
+      if (mapping.keywords && item.desc) {
+        const lower = item.desc.toLowerCase();
+        if (mapping.keywords.some(k => lower.includes(k))) {
+          mapping.teraValues.forEach(v => result.add(v));
+        }
+      }
+    }
   }
-  return "Standard";
+  return [...result];
 }
+
+// ── Helpers ──
+const t = () => STRINGS[currentLang];
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function setLang(lang) {
   currentLang = lang;
-  localStorage.setItem('scraperLang', lang);
+  localStorage.setItem('teraLang', lang);
   document.getElementById('btnKR').className = 'lang-btn' + (lang === 'kr' ? ' active' : '');
   document.getElementById('btnEN').className = 'lang-btn' + (lang === 'en' ? ' active' : '');
   document.getElementById('startBtn').textContent = STRINGS[lang].startBtn;
@@ -94,42 +231,18 @@ function setLang(lang) {
   document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
   document.getElementById('teraBtn').textContent = STRINGS[lang].teraBtn;
   document.getElementById('extractBtn').textContent = STRINGS[lang].extractBtn;
+  document.getElementById('sheetBtn').textContent = STRINGS[lang].hotelInsertBtn;
   const banner = document.getElementById('updateBanner');
-  if (banner.dataset.version) {
-    banner.textContent = STRINGS[lang].update(banner.dataset.version);
-  }
+  if (banner.dataset.version) banner.textContent = STRINGS[lang].update(banner.dataset.version);
   const pauseLabel = document.getElementById('pauseLabel');
-  if (pauseLabel) {
-    pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'After Photo Upload';
-  }
-}
-
-function t() { return STRINGS[currentLang]; }
-
-const CURRENT_VERSION = "5.0";
-const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/trip_scraper_extension/main/version.json";
-
-async function checkForUpdates() {
-  try {
-    const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
-    const data = await res.json();
-    if (data.version && data.version !== CURRENT_VERSION) {
-      const banner = document.getElementById("updateBanner");
-      banner.style.display = "block";
-      banner.dataset.version = data.version;
-      banner.textContent = t().update(data.version);
-      banner.onclick = () => window.open("https://github.com/Geresia/trip_scraper_extension/releases", "_blank");
-    }
-  } catch (e) {
-    console.log("Version check failed:", e.message);
-  }
+  if (pauseLabel) pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'After Photo Upload';
 }
 
 function setStatus(msg, type = "") {
   const el = document.getElementById("status");
   el.textContent = msg;
   el.className = "status" + (type ? " " + type : "");
-  console.log("[Scraper]", msg);
+  console.log("[Tera]", msg);
 }
 
 function setTeraStatus(msg, type = "") {
@@ -144,90 +257,56 @@ function setExtractStatus(msg, type = "") {
   el.className = "status" + (type ? " " + type : "");
 }
 
-function waitForContinue(roomName) {
-  return new Promise(resolve => {
-    const box = document.getElementById('pauseBox');
-    const msgEl = document.getElementById('pauseMsg');
-    const btn = document.getElementById('continueBtn');
-    msgEl.textContent = currentLang === 'kr'
-      ? `${roomName} - 사진 업로드 완료 후 계속을 눌러주세요.`
-      : `${roomName} - Upload photos, then click Continue.`;
-    box.style.display = 'block';
-    btn.textContent = currentLang === 'kr' ? '완료' : 'Continue';
-    btn.onclick = () => { box.style.display = 'none'; resolve(); };
-  });
+function matchRoomType(roomName) {
+  const name = roomName.toLowerCase();
+  return ROOM_TYPE_OPTIONS.find(o => name.includes(o.toLowerCase())) || "Standard";
 }
 
-function waitForContinueWithError(roomName) {
+function sanitizeName(name) {
+  return name.replace(/[\\/:*?"<>|]/g, "_").trim();
+}
+
+function waitForContinue(roomName, isError = false) {
   return new Promise(resolve => {
     const box = document.getElementById('pauseBox');
     const msgEl = document.getElementById('pauseMsg');
     const btn = document.getElementById('continueBtn');
-    msgEl.textContent = currentLang === 'kr'
-      ? `${roomName} — 에러가 있어요. 수정 후 계속을 눌러주세요.`
-      : `${roomName} — Error detected. Fix it, then click Continue.`;
-    msgEl.style.color = '#d93025';
+    msgEl.textContent = isError
+      ? (currentLang === 'kr' ? `${roomName} — 에러가 있어요. 수정 후 계속을 눌러주세요.` : `${roomName} — Error detected. Fix it, then click Continue.`)
+      : (currentLang === 'kr' ? `${roomName} - 사진 업로드 완료 후 계속을 눌러주세요.` : `${roomName} - Upload photos, then click Continue.`);
+    msgEl.style.color = isError ? '#d93025' : '';
     box.style.display = 'block';
     btn.textContent = currentLang === 'kr' ? '완료' : 'Continue';
     btn.onclick = () => { box.style.display = 'none'; msgEl.style.color = ''; resolve(); };
   });
 }
 
-async function scrapeTab(tabId) {
-  await chrome.scripting.executeScript({
-    target: { tabId }, world: "MAIN",
-    func: () => { window.__scrapeRoomsLoaded = false; }
-  });
-  await chrome.scripting.executeScript({
-    target: { tabId }, files: ["content.js"], world: "MAIN"
-  });
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId }, world: "MAIN",
-    func: () => {
-      window.__scrapeResult = null;
-      window.__scrapeDone = false;
-      if (typeof window.__scrapeRooms !== "function") {
-        window.__scrapeResult = { rooms: [], hotelPhotos: [] };
-        window.__scrapeDone = true;
-        return;
-      }
-      window.__scrapeRooms()
-        .then(result => { window.__scrapeResult = result; window.__scrapeDone = true; })
-        .catch(() => { window.__scrapeResult = { rooms: [], hotelPhotos: [] }; window.__scrapeDone = true; });
-    },
-  });
-
-  for (let i = 0; i < 600; i++) {
-    await new Promise(r => setTimeout(r, 500));
-    const results = await chrome.scripting.executeScript({
-      target: { tabId }, world: "MAIN",
-      func: () => ({ done: window.__scrapeDone, result: window.__scrapeResult })
-    });
-    const data = results?.[0]?.result;
-    if (data?.done) return data.result || { rooms: [], hotelPhotos: [] };
-  }
-  return { rooms: [], hotelPhotos: [] };
+async function checkForUpdates() {
+  try {
+    const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
+    const data = await res.json();
+    if (data.version && data.version !== CURRENT_VERSION) {
+      const banner = document.getElementById("updateBanner");
+      banner.style.display = "block";
+      banner.dataset.version = data.version;
+      banner.textContent = t().update(data.version);
+      banner.onclick = () => window.open("https://github.com/Geresia/tera_assistant/releases", "_blank");
+    }
+  } catch (e) { console.log("Version check failed:", e.message); }
 }
 
-const TARGET_W = 1280;
-const TARGET_H = 720;
-const NEAR_THRESHOLD = 0.3;
-const MAX_W = 4096;
-const MAX_H = 4096;
-
+// ── Image Processing ──
 function isLowQualityUrl(url) {
-  const match = url.match(/_R_(\d+)_(\d+)_/);
-  if (match) {
-    const w = Number(match[1]), h = Number(match[2]);
+  const m = url.match(/_R_(\d+)_(\d+)_/);
+  if (m) {
+    const w = Number(m[1]), h = Number(m[2]);
     if (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD) return true;
-    const ratio = w / h;
-    if (ratio < 0.5 || ratio > 2.0) return true;
+    const r = w / h;
+    if (r < 0.5 || r > 2.0) return true;
   }
-  const wMatch = url.match(/_W_(\d+)_(\d+)_/);
-  if (wMatch) {
-    const w = Number(wMatch[1]), h = Number(wMatch[2]);
+  const wm = url.match(/_W_(\d+)_(\d+)_/);
+  if (wm) {
+    const w = Number(wm[1]), h = Number(wm[2]);
     if (h > 0 && (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD)) return true;
   }
   return false;
@@ -277,936 +356,391 @@ async function checkAndUpscale(blob) {
   });
 }
 
-function sanitizeName(name) {
-  return name.replace(/[\\/:*?"<>|]/g, "_").trim();
+// ── Room Scan ──
+async function scanTab(tabId) {
+  await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: () => { window.__scanRoomsLoaded = false; } });
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"], world: "MAIN" });
+  await sleep(800);
+  await chrome.scripting.executeScript({
+    target: { tabId }, world: "MAIN",
+    func: () => {
+      window.__scanResult = null;
+      window.__scanDone = false;
+      if (typeof window.__scanRooms !== "function") {
+        window.__scanResult = { rooms: [], hotelPhotos: [] };
+        window.__scanDone = true;
+        return;
+      }
+      window.__scanRooms()
+        .then(r => { window.__scanResult = r; window.__scanDone = true; })
+        .catch(() => { window.__scanResult = { rooms: [], hotelPhotos: [] }; window.__scanDone = true; });
+    }
+  });
+  for (let i = 0; i < 600; i++) {
+    await sleep(500);
+    const results = await chrome.scripting.executeScript({
+      target: { tabId }, world: "MAIN",
+      func: () => ({ done: window.__scanDone, result: window.__scanResult })
+    });
+    const data = results?.[0]?.result;
+    if (data?.done) return data.result || { rooms: [], hotelPhotos: [] };
+  }
+  return { rooms: [], hotelPhotos: [] };
 }
 
-const BED_TYPE_MAP = {
-  'king': 'King', 'queen': 'Queen', 'single': 'Single', 'double': 'Double',
-  'twin': 'Twin', 'bunk': 'Bunk', 'capsule': 'Capsule', 'mattress': 'Mattress',
-  'sofa': 'Sofa', 'futon': 'Mattress',
-};
+// ── Tera Room Autofill ──
+function parseBeds(text) {
+  const beds = [];
+  for (const part of (text || '').split(/ and /i)) {
+    const m = part.trim().match(/^(\d+)\s+(.+?)\s+bed$/i);
+    if (m) beds.push({ count: m[1], type: BED_TYPE_MAP[m[2].trim().toLowerCase()] || 'Double' });
+  }
+  return beds.length ? beds : [{ count: '1', type: 'Double' }];
+}
+
+async function exec(tabId, func, args = [], world = undefined) {
+  const opts = { target: { tabId }, func, args };
+  if (world) opts.world = world;
+  return chrome.scripting.executeScript(opts);
+}
 
 async function teraFillOneRoom(tabId, room, roomType) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const divs = document.querySelectorAll('div');
-      for (const div of divs) {
-        if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) {
-          div.click(); return true;
-        }
-      }
-      return false;
+  await exec(tabId, () => {
+    for (const div of document.querySelectorAll('div')) {
+      if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) { div.click(); return; }
     }
   });
+  await sleep(2000);
 
-  await new Promise(r => setTimeout(r, 2000));
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-roomtype"]')?.click());
+  await sleep(1000);
+  await exec(tabId, (type) => {
+    Array.from(document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span'))
+      .find(s => s.textContent.trim() === type)?.closest('div').click();
+  }, [roomType]);
+  await sleep(1500);
 
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-roomtype"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
+  await exec(tabId, () => {
+    const input = document.querySelector('[data-testid="input-rs-room-numofrooms"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '1');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 1000));
+  await exec(tabId, (sizeText) => {
+    const match = sizeText.match(/[\d.]+/);
+    if (!match) return;
+    const input = document.querySelector('[data-testid="input-rs-room-size"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, match[0]);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [room.sizeText || ""]);
+  await sleep(500);
 
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (targetType) => {
-      const dropdown = document.querySelector('[data-testid="select-rs-room-roomtype-options"]');
-      if (!dropdown) return false;
-      const spans = dropdown.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.trim() === targetType) { span.closest('div').click(); return true; }
-      }
-      return false;
-    },
-    args: [roomType]
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-unit"]')?.click());
+  await sleep(800);
+  await exec(tabId, () => {
+    Array.from(document.querySelectorAll('[data-testid="select-rs-room-unit-options"] span'))
+      .find(s => s.textContent.trim().toLowerCase() === 'sqm')?.closest('div').click();
   });
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 1500));
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-window"]')?.click());
+  await sleep(800);
+  await exec(tabId, (hasWindow) => {
+    const target = hasWindow ? "Available" : "Not Available";
+    Array.from(document.querySelectorAll('[data-testid="select-rs-room-window-options"] span'))
+      .find(s => s.textContent.trim() === target)?.closest('div').click();
+  }, [room.windowType !== -100]);
+  await sleep(800);
 
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const input = document.querySelector('[data-testid="input-rs-room-numofrooms"]');
-      if (!input) return false;
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeInputValueSetter.call(input, '1');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    }
-  });
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-view"]')?.click());
+  await sleep(800);
+  await exec(tabId, (view) => {
+    const input = document.querySelector('[data-testid="select-rs-room-view-queryinput"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, view);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [room.roomView || "No Special View"]);
+  await sleep(500);
+  await exec(tabId, (view) => {
+    const opts = document.querySelectorAll('[data-testid="select-rs-room-view-options"] span');
+    const found = Array.from(opts).find(s => s.textContent.trim() === view);
+    const fallback = Array.from(opts).find(s => s.textContent.trim() === 'No Special View');
+    (found || fallback)?.closest('div').click();
+  }, [room.roomView || "No Special View"]);
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (sizeText) => {
-      const match = sizeText.match(/[\d.]+/);
-      if (!match) return false;
-      const input = document.querySelector('[data-testid="input-rs-room-size"]');
-      if (!input) return false;
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeInputValueSetter.call(input, match[0]);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    },
-    args: [room.sizeText || ""]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-unit"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const opts = document.querySelector('[data-testid="select-rs-room-unit-options"]');
-      if (!opts) return false;
-      const spans = opts.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.trim().toLowerCase() === 'sqm') { span.closest('div').click(); return true; }
-      }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-window"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (hasWindow) => {
-      const opts = document.querySelector('[data-testid="select-rs-room-window-options"]');
-      if (!opts) return false;
-      const target = hasWindow ? "Available" : "Not Available";
-      const spans = opts.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.trim() === target) { span.closest('div').click(); return true; }
-      }
-      return false;
-    },
-    args: [room.windowType !== -100]
-  });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-view"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (targetView) => {
-      const input = document.querySelector('[data-testid="select-rs-room-view-queryinput"]');
-      if (!input) return false;
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeSetter.call(input, targetView);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    },
-    args: [room.roomView || "No Special View"]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (targetView) => {
-      const opts = document.querySelectorAll('[data-testid="select-rs-room-view-options"] span');
-      if (!opts.length) return false;
-      const found = Array.from(opts).find(s => s.textContent.trim() === targetView);
-      if (found) { found.closest('div').click(); return true; }
-      const fallback = Array.from(opts).find(s => s.textContent.trim() === 'No Special View');
-      if (fallback) { fallback.closest('div').click(); return true; }
-      return false;
-    },
-    args: [room.roomView || "No Special View"]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  function parseBeds(text) {
-    const beds = [];
-    const parts = (text || '').split(/ and /i);
-    for (const part of parts) {
-      const m = part.trim().match(/^(\d+)\s+(.+?)\s+bed$/i);
-      if (m) {
-        const raw = m[2].trim().toLowerCase();
-        beds.push({ count: m[1], type: BED_TYPE_MAP[raw] || 'Double' });
-      }
-    }
-    if (beds.length === 0) beds.push({ count: '1', type: 'Double' });
-    return beds;
-  }
+  await exec(tabId, () => document.querySelector('[data-testid="button-rs-room-open-bed-settings"]')?.click());
+  await sleep(800);
 
   const hasOr = (room.bedText || '').toLowerCase().includes(' or ');
-  const arrangements = hasOr ? room.bedText.split(/ or /i).map(s => s.trim()) : null;
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const btn = document.querySelector('[data-testid="button-rs-room-open-bed-settings"]');
-      if (btn) { btn.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 800));
+  await exec(tabId, () => document.querySelector('[data-testid="radio-option-single-bedroom"]')?.click());
+  await sleep(500);
 
   if (hasOr) {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const radio = document.querySelector('[data-testid="radio-option-single-bedroom"]');
-        if (radio) { radio.click(); return true; }
-        return false;
+    await exec(tabId, () => {
+      for (const span of document.querySelectorAll('span.css-1rlnnbz')) {
+        if (span.textContent.trim() === 'Multiple Bed Arrangement') {
+          span.closest('label').querySelector('input[type="radio"]')?.click();
+          return;
+        }
       }
     });
-
-    await new Promise(r => setTimeout(r, 500));
-
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const spans = document.querySelectorAll('span.css-1rlnnbz');
-        for (const span of spans) {
-          if (span.textContent.trim() === 'Multiple Bed Arrangement') {
-            const radio = span.closest('label').querySelector('input[type="radio"]');
-            if (radio) { radio.click(); return true; }
-          }
+    await sleep(800);
+    const allBeds = room.bedText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
+    await exec(tabId, async (beds) => {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < beds.length; i++) {
+        document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}"]`)?.click();
+        await delay(400);
+        const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}-queryinput"]`);
+        if (input) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, beds[i].type);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await delay(400);
+          Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-0-${i}-options"] span`))
+            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+          await delay(300);
         }
-        return false;
+        const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-0-${i}"]`);
+        if (countInput) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(countInput, beds[i].count);
+          countInput.dispatchEvent(new Event('input', { bubbles: true }));
+          countInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       }
-    });
-
-    await new Promise(r => setTimeout(r, 800));
-
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: async (allBeds) => {
-        const delay = ms => new Promise(r => setTimeout(r, ms));
-        for (let i = 0; i < allBeds.length; i++) {
-          const trigger = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}"]`);
-          if (trigger) { trigger.click(); await delay(400); }
-          const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}-queryinput"]`);
-          if (input) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            nativeSetter.call(input, allBeds[i].type);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            await delay(400);
-            const opts = Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-0-${i}-options"] span`));
-            const found = opts.find(s => s.textContent.trim() === allBeds[i].type);
-            if (found) { found.closest('div').click(); await delay(300); }
-          }
-          const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-0-${i}"]`);
-          if (countInput) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            nativeSetter.call(countInput, allBeds[i].count);
-            countInput.dispatchEvent(new Event('input', { bubbles: true }));
-            countInput.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }
-        return true;
-      },
-      args: [arrangements.flatMap(a => parseBeds(a))]
-    });
-
+    }, [allBeds]);
   } else {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const radio = document.querySelector('[data-testid="radio-option-single-bedroom"]');
-        if (radio) { radio.click(); return true; }
-        return false;
-      }
-    });
-
-    await new Promise(r => setTimeout(r, 500));
-
     const beds = parseBeds(room.bedText);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: async (beds) => {
-        const delay = ms => new Promise(r => setTimeout(r, ms));
-        for (let i = 0; i < beds.length; i++) {
-          if (i > 0) {
-            const addBtn = document.querySelector('[data-testid="button-add-another-bedtype-0"]');
-            if (addBtn) addBtn.click();
-            await delay(400);
-          }
-          const trigger = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}"]`);
-          if (trigger) { trigger.click(); await delay(400); }
-          const input = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}-queryinput"]`);
-          if (input) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            nativeSetter.call(input, beds[i].type);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            await delay(400);
-            const opts = Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-0-${i}-options"] span`));
-            const found = opts.find(s => s.textContent.trim() === beds[i].type);
-            if (found) { found.closest('div').click(); await delay(300); }
-          }
-          const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-0-${i}"]`);
-          if (countInput) {
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            nativeSetter.call(countInput, beds[i].count);
-            countInput.dispatchEvent(new Event('input', { bubbles: true }));
-            countInput.dispatchEvent(new Event('change', { bubbles: true }));
-          }
+    await exec(tabId, async (beds) => {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < beds.length; i++) {
+        if (i > 0) { document.querySelector('[data-testid="button-add-another-bedtype-0"]')?.click(); await delay(400); }
+        document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}"]`)?.click();
+        await delay(400);
+        const input = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}-queryinput"]`);
+        if (input) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, beds[i].type);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await delay(400);
+          Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-0-${i}-options"] span`))
+            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+          await delay(300);
         }
-        return true;
-      },
-      args: [beds]
-    });
+        const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-0-${i}"]`);
+        if (countInput) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(countInput, beds[i].count);
+          countInput.dispatchEvent(new Event('input', { bubbles: true }));
+          countInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }, [beds]);
   }
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const btn = document.querySelector('[data-testid="button-add-facilities"]');
-      if (btn) { btn.click(); return true; }
-      return false;
+  await exec(tabId, () => document.querySelector('[data-testid="button-add-facilities"]')?.click());
+  await sleep(800);
+  await exec(tabId, (codes) => {
+    if (!codes) return;
+    for (const code of codes.split(',').map(c => c.trim()).filter(Boolean)) {
+      const cb = document.querySelector(`[data-testid="checkbox-facility-${code}"]`);
+      if (cb && !cb.checked) cb.click();
     }
+  }, [room.facilityStr || ""]);
+  await sleep(500);
+  await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
+  await sleep(500);
+  await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
+  await sleep(500);
+
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-gender"]')?.click());
+  await sleep(800);
+  await exec(tabId, (name) => {
+    const lower = name.toLowerCase();
+    const target = (lower.includes('male only') || (lower.includes('male') && !lower.includes('female'))) ? 'Male Only'
+      : lower.includes('female') ? 'Female Only' : 'All';
+    Array.from(document.querySelectorAll('[data-testid="select-rs-room-gender-options"] span'))
+      .find(s => s.textContent.trim() === target)?.closest('div').click();
+  }, [room.roomName || ""]);
+  await sleep(500);
+
+  await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-smoking"]')?.click());
+  await sleep(800);
+  await exec(tabId, (smoking) => {
+    const target = smoking === 'YES' ? 'Smoking' : 'Non-Smoking';
+    Array.from(document.querySelectorAll('[data-testid="select-rs-room-smoking-options"] span'))
+      .find(s => s.textContent.trim() === target)?.closest('div').click();
+  }, [room.smoking || 'NO']);
+  await sleep(500);
+
+  await exec(tabId, () => {
+    const cb = document.querySelector('[data-testid="checkbox-rs-room-customizable-name"]');
+    if (cb && !cb.checked) cb.click();
   });
+  await sleep(500);
+  await exec(tabId, (name) => {
+    const input = document.querySelector('[data-testid="input-rs-room-custom-name"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, name);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [room.roomName || ""]);
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (facilityCodes) => {
-      if (!facilityCodes || !facilityCodes.length) return false;
-      const codes = facilityCodes.split(',').map(c => c.trim()).filter(Boolean);
-      for (const code of codes) {
-        const cb = document.querySelector(`[data-testid="checkbox-facility-${code}"]`);
-        if (cb && !cb.checked) cb.click();
+  await exec(tabId, (occ) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    for (const id of ['input-rs-room-maxguest', 'input-rs-room-maxadult']) {
+      const input = document.querySelector(`[data-testid="${id}"]`);
+      if (input) {
+        setter.call(input, String(occ));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      return true;
-    },
-    args: [room.facilityStr || ""]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const btn = document.querySelector('[data-testid="button-modal-save"]');
-      if (btn) { btn.click(); return true; }
-      return false;
     }
+  }, [room.occupancy || 2]);
+  await sleep(500);
+
+  await exec(tabId, () => {
+    const sw = document.querySelector('[data-testid="switch-allow-children"]');
+    if (sw?.checked) sw.click();
   });
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const btn = document.querySelector('[data-testid="button-modal-save"]');
-      if (btn) { btn.click(); return true; }
-      return false;
-    }
+  await exec(tabId, () => {
+    const sw = document.querySelector('[data-testid="switch-extra-occupancy"]');
+    if (sw?.checked) sw.click();
   });
+  await sleep(500);
 
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-gender"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
+  await exec(tabId, () => {
+    const input = document.querySelector('[data-testid="input-rs-room-rate-protection-amount"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '10000');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (roomName) => {
-      const lower = roomName.toLowerCase();
-      let target = 'All';
-      if (lower.includes('male only') || (lower.includes('male') && !lower.includes('female'))) target = 'Male Only';
-      else if (lower.includes('female')) target = 'Female Only';
-      const opts = document.querySelectorAll('[data-testid="select-rs-room-gender-options"] span');
-      const found = Array.from(opts).find(s => s.textContent.trim() === target);
-      if (found) { found.closest('div').click(); return true; }
-      return false;
-    },
-    args: [room.roomName || ""]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const trigger = document.querySelector('[data-testid="select-rs-room-smoking"]');
-      if (trigger) { trigger.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 800));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (smoking) => {
-      const target = smoking === 'YES' ? 'Smoking' : 'Non-Smoking';
-      const opts = document.querySelectorAll('[data-testid="select-rs-room-smoking-options"] span');
-      const found = Array.from(opts).find(s => s.textContent.trim() === target);
-      if (found) { found.closest('div').click(); return true; }
-      return false;
-    },
-    args: [room.smoking || 'NO']
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const cb = document.querySelector('[data-testid="checkbox-rs-room-customizable-name"]');
-      if (cb && !cb.checked) { cb.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (roomName) => {
-      const input = document.querySelector('[data-testid="input-rs-room-custom-name"]');
-      if (!input) return false;
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeSetter.call(input, roomName);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    },
-    args: [room.roomName || ""]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (occupancy) => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      const maxGuest = document.querySelector('[data-testid="input-rs-room-maxguest"]');
-      if (maxGuest) {
-        nativeSetter.call(maxGuest, String(occupancy));
-        maxGuest.dispatchEvent(new Event('input', { bubbles: true }));
-        maxGuest.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      const maxAdult = document.querySelector('[data-testid="input-rs-room-maxadult"]');
-      if (maxAdult) {
-        nativeSetter.call(maxAdult, String(occupancy));
-        maxAdult.dispatchEvent(new Event('input', { bubbles: true }));
-        maxAdult.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      return true;
-    },
-    args: [room.occupancy || 2]
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const sw = document.querySelector('[data-testid="switch-allow-children"]');
-      if (sw && sw.checked) { sw.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const sw = document.querySelector('[data-testid="switch-extra-occupancy"]');
-      if (sw && sw.checked) { sw.click(); return true; }
-      return false;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 500));
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const input = document.querySelector('[data-testid="input-rs-room-rate-protection-amount"]');
-      if (!input) return false;
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeSetter.call(input, '10000');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    }
-  });
-
-  await new Promise(r => setTimeout(r, 500));
+  await sleep(500);
 }
 
-document.getElementById("teraBtn").addEventListener("click", async () => {
-  if (scannedRooms.length === 0) {
-    setTeraStatus(t().teraNoRooms, "error");
-    return;
-  }
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab.url?.includes("traveloka.com")) {
-    setTeraStatus(t().teraNotTera, "error");
-    return;
-  }
-
-  const btn = document.getElementById("teraBtn");
-  btn.disabled = true;
-
-  try {
-    for (let i = 0; i < scannedRooms.length; i++) {
-      const room = scannedRooms[i];
-      const roomType = matchRoomType(room.roomName);
-      setTeraStatus(t().teraRunning(i + 1, scannedRooms.length));
-      await teraFillOneRoom(tab.id, room, roomType);
-      await waitForContinue(room.roomName);
-
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: "MAIN",
-        func: () => {
-          const btn = document.querySelector('[data-testid="button-mainform-submit"]');
-          if (btn) { btn.click(); return true; }
-          return false;
-        }
-      });
-
-      await new Promise(r => setTimeout(r, 1500));
-
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const btns = document.querySelectorAll('.css-jr388n');
-          for (const btn of btns) {
-            if (btn.textContent.trim() === 'Save') { btn.click(); return true; }
-          }
-          return false;
-        }
-      });
-
-      await new Promise(r => setTimeout(r, 3000));
-
-      while (true) {
-        const errorCheck = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => !!document.querySelector('[data-id="IcSystemStatusFail16"]')
-        });
-        if (!errorCheck?.[0]?.result) break;
-        await waitForContinueWithError(room.roomName);
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            const btn = document.querySelector('[data-testid="button-mainform-submit"]');
-            if (btn) { btn.click(); return true; }
-            return false;
-          }
-        });
-        await new Promise(r => setTimeout(r, 1500));
-      }
-
-      await new Promise(r => setTimeout(r, 800));
-    }
-    setTeraStatus(t().teraDone(scannedRooms.length), "success");
-  } catch(err) {
-    setTeraStatus(t().teraError(err.message), "error");
-  }
-  btn.disabled = false;
-});
-
-document.getElementById("startBtn").addEventListener("click", async () => {
-  const hotelName = document.getElementById("hotelName").value.trim();
-  const btn = document.getElementById("startBtn");
-  btn.disabled = true;
-  scannedRooms = [];
-  setTeraStatus("");
-
-  try {
-    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const baseUrl = currentTab.url;
-
-    if (!baseUrl.includes("trip.com/hotels")) {
-      setStatus(t().notTripPage, "error");
-      btn.disabled = false;
-      return;
-    }
-
-    setStatus(t().scan1);
-    const result1 = await scrapeTab(currentTab.id);
-    const hotelPhotos = result1.hotelPhotos || [];
-    const allRooms = new Map();
-    (result1.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
-    setStatus(t().scan1done(allRooms.size, hotelPhotos.length));
-
-    const finalRooms = [...allRooms.values()];
-
-    if (finalRooms.length === 0) {
-      setStatus(t().noRooms, "error");
-      btn.disabled = false;
-      return;
-    }
-
-    scannedRooms = finalRooms;
-    chrome.storage.session.set({ scannedRooms: finalRooms });
-
-    if (typeof JSZip !== "undefined") {
-      setStatus(t().zipping);
-      const zip = new JSZip();
-      const folderName = sanitizeName(hotelName || String(Date.now()));
-      const hotelFolder = zip.folder(folderName);
-      const normalizeUrl = url => url.split('?')[0].trim();
-      let photoCount = 0;
-
-      async function processChunk(urls) {
-        return Promise.all(urls.map(async (url) => {
-          const ext = url.includes(".webp") ? "jpg" : (url.match(/\.(jpg|jpeg|png)/i)?.[1] || "jpg");
-          try {
-            const urlLow = isLowQualityUrl(url);
-            const res = await fetch(url);
-            let blob = await res.blob();
-            let low = false;
-            if (urlLow) {
-              low = true;
-            } else {
-              const result = await checkAndUpscale(blob);
-              blob = result.blob;
-              low = result.isLow;
-            }
-            return { blob, low, ext };
-          } catch (e) {
-            console.log("Photo fetch failed:", url);
-            return null;
-          }
-        }));
-      }
-
-      for (const room of finalRooms) {
-        if (!room.roomPhotos || !room.roomPhotos.length) continue;
-        const roomFolder = hotelFolder.folder(sanitizeName(room.roomName));
-        let idx = 1;
-        const roomSeenUrls = new Set();
-        const uniqueUrls = [...room.roomPhotos].filter(url => {
-          if (!url || roomSeenUrls.has(normalizeUrl(url))) return false;
-          roomSeenUrls.add(normalizeUrl(url));
-          return true;
-        });
-        for (let i = 0; i < uniqueUrls.length; i += 6) {
-          const chunk = uniqueUrls.slice(i, i + 6);
-          const results = await processChunk(chunk);
-          for (const result of results) {
-            if (!result) continue;
-            const filename = `${String(idx).padStart(2, "0")}${result.low ? "_LOW_QUALITY" : ""}.${result.ext}`;
-            roomFolder.file(filename, result.blob);
-            idx++;
-            photoCount++;
-          }
-        }
-      }
-
-      if (hotelPhotos && hotelPhotos.length > 0) {
-        const hotelPhotoFolder = hotelFolder.folder("Hotel Photo");
-        const hotelOnlyUrls = new Set();
-        const uniqueHotelUrls = hotelPhotos.filter(url => {
-          if (!url || hotelOnlyUrls.has(normalizeUrl(url))) return false;
-          hotelOnlyUrls.add(normalizeUrl(url));
-          return true;
-        });
-        let hidx = 1;
-        for (let i = 0; i < uniqueHotelUrls.length; i += 6) {
-          const chunk = uniqueHotelUrls.slice(i, i + 6);
-          const results = await processChunk(chunk);
-          for (const result of results) {
-            if (!result) continue;
-            const filename = `${String(hidx).padStart(2, "0")}${result.low ? "_LOW_QUALITY" : ""}.${result.ext}`;
-            hotelPhotoFolder.file(filename, result.blob);
-            hidx++;
-            photoCount++;
-          }
-        }
-      }
-
-      if (photoCount > 0) {
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const zipUrl = URL.createObjectURL(zipBlob);
-        const a = document.createElement("a");
-        a.href = zipUrl;
-        a.download = `${folderName}_photos.zip`;
-        a.click();
-        URL.revokeObjectURL(zipBlob);
-        setStatus(t().done(finalRooms.length, photoCount), "success");
-      } else {
-        setStatus(t().noPhotos(finalRooms.length), "success");
-      }
-    } else {
-      setStatus(t().noJszip(finalRooms.length), "success");
-    }
-
-  } catch (err) {
-    console.error("[Scraper] 에러:", err);
-    setStatus("Error: " + err.message, "error");
-  }
-
-  btn.disabled = false;
-});
-
-setLang(currentLang);
-document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
-document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
-checkForUpdates();
-
-// ── Hotel Info ──
-const FIELD_ORDER = [
-  "hotel_id", "name_en", "name_local", "address", "postal_code",
-  "checkin_time", "checkin_end", "checkout_start", "checkout_time",
-  "front_desk_hours", "built_year", "renovated_year", "room_count",
-  "floor_count", "restaurant_count", "bar_count", "breakfast_style",
-  "breakfast_price", "breakfast_hours", "airport_transfer",
-  "airport_transfer_fee", "parking", "parking_type", "parking_price",
-  "room_service", "voltage",
-];
-
-let currentHotelData = null;
-
-const COUNTRY_LOCALE_MAP = {
-  "south korea": "ko-KR", "korea": "ko-KR",
-  "japan": "ja-JP", "china": "zh-CN", "hong kong": "zh-HK",
-  "indonesia": "id-ID", "vietnam": "vi-VN", "thailand": "th-TH",
-  "philippines": "en-PH", "malaysia": "ms-MY", "singapore": "en-SG",
-};
-
-const fetchLocalData = async (hotelId, locale) => {
-  const today = new Date();
-  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, "");
-  const checkIn = fmt(today);
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  const checkOut = fmt(tomorrow);
-  const body = {
-    hotelId: parseInt(hotelId), checkIn, checkOut,
-    adult: 2, child: 0, childrenAgeList: [], roomQuantity: 1, isBusiness: false,
-    location: { geo: { cityID: 0 } }, mapType: "", extra: { useHotPoiQuery: true },
-    feature: [], filterInfoList: [], hotelCertificateSwitch: "F",
-    hotelInfoOptions: [{ key: "HotelStay", value: "T" }, { key: "InterHome", value: "T" }],
-    policyOptions: ["divideHotelPolicy", "EnableNewPetPolicy", "EnableChildrenTipPopLayer", "JapanChildPriceSwitch"],
-    policyPageCode: "trip-hotel-detail",
-    versionControl: [{ key: "EnableFacilityV2", value: "B" }, { key: "UseTokenIcon", value: "T" }, { key: "MVPv2", value: "T" }],
-    head: { platform: "PC", cver: "0", bu: "IBU", group: "trip", locale }
-  };
-  try {
-    const res = await fetch("https://www.trip.com/restapi/soa2/33269/getHotelDetailAggregate", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-    });
-    const json = await res.json();
-    return json?.data || null;
-  } catch (e) { return null; }
-};
-
+// ── Hotel Info Scripts ──
 const extractScript = () => {
   const data = {};
   const url = window.location.href;
   const text = document.body?.innerText || "";
 
-  const subtractOneMin = (timeStr) => {
+  const adjustTime = (timeStr, mins) => {
     const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return timeStr;
-    let h = parseInt(m[1]), min = parseInt(m[2]);
-    min -= 1;
-    if (min < 0) { min = 59; h -= 1; }
+    let h = parseInt(m[1]), min = parseInt(m[2]) + mins;
+    if (min < 0) { min += 60; h -= 1; }
     if (h < 0) h = 23;
     return `${String(h).padStart(2,"0")}:${String(min).padStart(2,"0")}`;
   };
 
-  const subtractThirtyMin = (timeStr) => {
-    const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-    if (!m) return timeStr;
-    let h = parseInt(m[1]), min = parseInt(m[2]);
-    min -= 30;
-    if (min < 0) { min += 60; h -= 1; }
-    if (h < 0) h = 23;
-    return `${String(h).padStart(2,"00")}:${String(min).padStart(2,"0")}`;
-  };
-
   const idM = url.match(/hotelId=(\d+)/) || url.match(/\/hotels\/[^/]+-(\d+)\//);
-  data.hotel_id = idM ? idM[1] : "";
+  data.hotel_id = idM?.[1] || "";
   data.name_en = document.querySelector("h1")?.innerText?.trim() || "";
 
   const addrEl = document.querySelector('[class*="address"], [class*="Address"]');
-  let rawAddr = addrEl?.innerText?.trim() || "";
-  rawAddr = rawAddr.replace(/show on map/gi, "").replace(/\n/g, " ").trim();
-  const postalM = rawAddr.match(/\b(\d{5})\b/);
-  data.postal_code = postalM ? postalM[1] : "";
+  let rawAddr = (addrEl?.innerText?.trim() || "").replace(/show on map/gi, "").replace(/\n/g, " ").trim();
+  data.postal_code = rawAddr.match(/\b(\d{5})\b/)?.[1] || "";
   data.address = rawAddr;
 
   let countryRaw = "";
   for (const s of document.querySelectorAll("script:not([src])")) {
-    const t = s.textContent || "";
-    if (t.includes('"countryName"')) {
-      const m = t.match(/"countryName"\s*:\s*"([^"]+)"/);
-      if (m) { countryRaw = m[1].toLowerCase(); break; }
-    }
+    const m = s.textContent.match(/"countryName"\s*:\s*"([^"]+)"/);
+    if (m) { countryRaw = m[1].toLowerCase(); break; }
   }
   if (!countryRaw) {
-    if (/south korea|korea/i.test(text)) countryRaw = "south korea";
-    else if (/japan/i.test(text)) countryRaw = "japan";
-    else if (/hong kong/i.test(text)) countryRaw = "hong kong";
-    else if (/china/i.test(text)) countryRaw = "china";
-    else if (/indonesia/i.test(text)) countryRaw = "indonesia";
-    else if (/vietnam/i.test(text)) countryRaw = "vietnam";
-    else if (/thailand/i.test(text)) countryRaw = "thailand";
-    else if (/philippines/i.test(text)) countryRaw = "philippines";
-    else if (/malaysia/i.test(text)) countryRaw = "malaysia";
-    else if (/singapore/i.test(text)) countryRaw = "singapore";
+    const checks = [["south korea|korea", "south korea"], ["japan", "japan"], ["hong kong", "hong kong"],
+      ["china", "china"], ["indonesia", "indonesia"], ["vietnam", "vietnam"], ["thailand", "thailand"],
+      ["philippines", "philippines"], ["malaysia", "malaysia"], ["singapore", "singapore"]];
+    for (const [re, val] of checks) { if (new RegExp(re, 'i').test(text)) { countryRaw = val; break; } }
   }
   data._countryRaw = countryRaw;
   data._hotelId = data.hotel_id;
 
-  const checkDivs = document.querySelectorAll('[class*="hotelPolicy-check__"]');
   let checkinRaw = "", checkoutRaw = "";
-  for (const div of checkDivs) {
-    const subTitle = div.querySelector('[class*="hotelPolicy-subTitle__"]')?.innerText?.trim() || "";
+  for (const div of document.querySelectorAll('[class*="hotelPolicy-check__"]')) {
+    const sub = div.querySelector('[class*="hotelPolicy-subTitle__"]')?.innerText?.trim() || "";
     const desc = div.querySelector('[class*="hotelPolicy-check_desc__"]')?.innerText?.trim() || "";
-    if (subTitle.toLowerCase().includes("check-in")) checkinRaw = desc;
-    else if (subTitle.toLowerCase().includes("check-out")) checkoutRaw = desc;
+    if (sub.toLowerCase().includes("check-in")) checkinRaw = desc;
+    else if (sub.toLowerCase().includes("check-out")) checkoutRaw = desc;
   }
 
   let frontDeskRaw = "";
-  const policyRight = document.querySelector('[class*="hotelPolicy-item_right__"]');
-  if (policyRight) {
-    for (const p of policyRight.querySelectorAll("p")) {
-      if (p.innerText?.toLowerCase().includes("front desk")) {
-        frontDeskRaw = p.innerText.replace(/Front desk hours?:\s*/i, "").trim();
-      }
+  for (const p of document.querySelector('[class*="hotelPolicy-item_right__"]')?.querySelectorAll("p") || []) {
+    if (p.innerText?.toLowerCase().includes("front desk")) {
+      frontDeskRaw = p.innerText.replace(/Front desk hours?:\s*/i, "").trim();
     }
   }
 
-  const is24h = /24\/7|24 hours/i.test(frontDeskRaw);
   const cinRangeM = checkinRaw.match(/(\d{1,2}:\d{2})\s*[–\-~]\s*(\d{1,2}:\d{2})/);
   const coutRangeM = checkoutRaw.match(/(\d{1,2}:\d{2})\s*[–\-~]\s*(\d{1,2}:\d{2})/);
   const cinM = checkinRaw.match(/(\d{1,2}:\d{2})/);
   const coutM = checkoutRaw.match(/(\d{1,2}:\d{2})/);
 
   if (cinRangeM && coutRangeM) {
-    data.checkin_time   = cinRangeM[1];
-    data.checkin_end    = cinRangeM[2] === "24:00" ? "23:59" : cinRangeM[2];
+    data.checkin_time = cinRangeM[1];
+    data.checkin_end = cinRangeM[2] === "24:00" ? "23:59" : cinRangeM[2];
     data.checkout_start = coutRangeM[1];
-    data.checkout_time  = coutRangeM[2];
+    data.checkout_time = coutRangeM[2];
   } else {
-    data.checkin_time   = cinM  ? cinM[1]  : checkinRaw;
-    data.checkin_end    = "23:59";
+    data.checkin_time = cinM?.[1] || checkinRaw;
+    data.checkin_end = "23:59";
     data.checkout_start = "00:00";
-    data.checkout_time  = coutM ? coutM[1] : checkoutRaw;
+    data.checkout_time = coutM?.[1] || checkoutRaw;
   }
 
-  if (data.checkout_start && data.checkout_start === data.checkout_time)
-    data.checkout_start = subtractOneMin(data.checkout_start);
-  if (data.checkin_time && data.checkin_time === data.checkin_end)
-    data.checkin_time = subtractThirtyMin(data.checkin_time);
-
-  data.front_desk_hours = (is24h || !frontDeskRaw) ? "Yes" : "No";
+  if (data.checkout_start === data.checkout_time) data.checkout_start = adjustTime(data.checkout_start, -1);
+  if (data.checkin_time === data.checkin_end) data.checkin_time = adjustTime(data.checkin_time, -30);
+  data.front_desk_hours = (/24\/7|24 hours/i.test(frontDeskRaw) || !frontDeskRaw) ? "Yes" : "No";
 
   for (const s of document.querySelectorAll("script:not([src])")) {
-    const t = s.textContent || "";
-    if (!data.built_year && t.includes('"openYear"')) {
-      const m = t.match(/"openYear"\s*:\s*"?(\d{4})"?/);
-      if (m) data.built_year = m[1];
-    }
-    if (!data.room_count && t.includes('"roomCount"')) {
-      const m = t.match(/"roomCount"\s*:\s*(\d+)/);
-      if (m) data.room_count = m[1];
-    }
-    if (!data.hotel_id && t.includes('"hotelId"')) {
-      const m = t.match(/"hotelId"\s*:\s*(\d+)/);
-      if (m) data.hotel_id = m[1];
-    }
+    const t = s.textContent;
+    if (!data.built_year) { const m = t.match(/"openYear"\s*:\s*"?(\d{4})"?/); if (m) data.built_year = m[1]; }
+    if (!data.room_count) { const m = t.match(/"roomCount"\s*:\s*(\d+)/); if (m) data.room_count = m[1]; }
+    if (!data.hotel_id) { const m = t.match(/"hotelId"\s*:\s*(\d+)/); if (m) data.hotel_id = m[1]; }
   }
 
-  if (!data.built_year) {
-    const m = text.match(/Opened[:\s]+(\d{4})/i);
-    if (m) data.built_year = m[1];
-  }
+  if (!data.built_year) { const m = text.match(/Opened[:\s]+(\d{4})/i); if (m) data.built_year = m[1]; }
   if (!data.room_count) {
     const m = text.match(/Number of Rooms[:\s]+(\d+)/i) || text.match(/(\d+)\s*air-conditioned rooms/i);
     if (m) data.room_count = m[1];
   }
   if (!data.renovated_year) {
     const m = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
-    data.renovated_year = m ? m[1] : (data.built_year || "1");
+    data.renovated_year = m?.[1] || data.built_year || "1";
   }
 
   const floorM = text.match(/(\d+)(?:th|rd|nd|st)-floor/i) || text.match(/(\d+)\s*floors?/i);
   if (floorM) data.floor_count = floorM[1];
 
-  const bfEls = document.querySelectorAll('[class*="breakfast"], [class*="Breakfast"]');
-  for (const el of bfEls) {
+  for (const el of document.querySelectorAll('[class*="breakfast"], [class*="Breakfast"]')) {
     const t2 = el.innerText || "";
-    if (!data.breakfast_style) {
-      const m = t2.match(/Style[:\s]+(\w+)/i);
-      if (m) data.breakfast_style = m[1];
-    }
-    if (!data.breakfast_hours) {
-      const m = t2.match(/Opening hours?[:\s]+([^\n]+)/i);
-      if (m) data.breakfast_hours = m[1].trim();
-    }
-    if (!data.breakfast_price) {
-      const m = t2.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i);
-      if (m) data.breakfast_price = m[1].replace(/,/g, "");
-    }
+    if (!data.breakfast_style) { const m = t2.match(/Style[:\s]+(\w+)/i); if (m) data.breakfast_style = m[1]; }
+    if (!data.breakfast_hours) { const m = t2.match(/Opening hours?[:\s]+([^\n]+)/i); if (m) data.breakfast_hours = m[1].trim(); }
+    if (!data.breakfast_price) { const m = t2.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i); if (m) data.breakfast_price = m[1].replace(/,/g, ""); }
   }
   if (!data.breakfast_style && /buffet/i.test(text)) data.breakfast_style = "Buffet";
-  if (!data.breakfast_hours) {
-    const m = text.match(/\[Mon\s*-\s*Sun\]\s*([\d:]+\s*-\s*[\d:]+)/i);
-    if (m) data.breakfast_hours = m[1];
-  }
+  if (!data.breakfast_hours) { const m = text.match(/\[Mon\s*-\s*Sun\]\s*([\d:]+\s*-\s*[\d:]+)/i); if (m) data.breakfast_hours = m[1]; }
   if (!data.breakfast_price) {
-    const bfPriceM = text.match(/(?:breakfast|buffet)[^\n]{0,80}(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i)
-                  || text.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)[^\n]{0,50}(?:breakfast|buffet|per person)/i);
-    if (bfPriceM) data.breakfast_price = bfPriceM[1].replace(/,/g, "");
+    const m = text.match(/(?:breakfast|buffet)[^\n]{0,80}(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i)
+           || text.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)[^\n]{0,50}(?:breakfast|buffet|per person)/i);
+    if (m) data.breakfast_price = m[1].replace(/,/g, "");
   }
 
   const hasPickup = /airport\s*(pickup|shuttle)/i.test(text);
@@ -1216,26 +750,23 @@ const extractScript = () => {
     if (/airport\s*(?:pickup|shuttle|drop)[^.]*free/i.test(text) || /free[^.]*airport\s*(?:pickup|shuttle|drop)/i.test(text)) {
       data.airport_transfer_fee = "Free";
     } else {
-      const feeM = text.match(/airport\s*(?:pickup|shuttle|drop)[^.]*?(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i)
-                || text.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)[^.]*airport\s*(?:pickup|shuttle|drop)/i);
-      data.airport_transfer_fee = feeM ? feeM[1].replace(/,/g, "") : "-";
+      const m = text.match(/airport\s*(?:pickup|shuttle|drop)[^.]*?(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)/i)
+             || text.match(/(?:KRW|USD|CNY|JPY|HKD)\s*([\d,]+)[^.]*airport\s*(?:pickup|shuttle|drop)/i);
+      data.airport_transfer_fee = m?.[1].replace(/,/g, "") || "-";
     }
   } else {
     data.airport_transfer_fee = "-";
   }
 
   const parkingUnavail = Array.from(document.querySelectorAll('[class*="hotelFacility-popular_descUnavail__"]'))
-    .find(el => (el.innerText || "").toLowerCase().includes("parking"));
+    .find(el => el.innerText?.toLowerCase().includes("parking"));
   const parkingFreeLabel = Array.from(document.querySelectorAll('[aria-label*="parking"], [aria-label*="Parking"]'))
-    .find(el => (el.getAttribute("aria-label") || "").toLowerCase().includes("free"));
+    .find(el => el.getAttribute("aria-label")?.toLowerCase().includes("free"));
   const parkingFreeTag = document.querySelector('[class*="hotelFacility-popular_free__"]');
-  const parkingDescEls = document.querySelectorAll('[class*="hotelFacility-normal_descA__"]');
   let parkingDescText = "";
-  for (const el of parkingDescEls) {
+  for (const el of document.querySelectorAll('[class*="hotelFacility-normal_descA__"]')) {
     const t2 = el.innerText || "";
-    if (/parking/i.test(t2) || /charge/i.test(t2) || /KRW|JPY|CNY|HKD|USD/i.test(t2)) {
-      parkingDescText = t2; break;
-    }
+    if (/parking|charge|KRW|JPY|CNY|HKD|USD/i.test(t2)) { parkingDescText = t2; break; }
   }
 
   if (parkingUnavail) {
@@ -1243,138 +774,113 @@ const extractScript = () => {
   } else if (parkingFreeLabel || parkingFreeTag) {
     data._parking = "Yes"; data._parking_type = "Free"; data._parking_price = "-";
   } else if (parkingDescText) {
-    const priceM = parkingDescText.match(/(KRW|JPY|CNY|HKD|USD)\s*([\d,]+)/i);
-    data._parking = "Yes";
-    data._parking_type = "Paid";
-    data._parking_price = priceM ? `${priceM[1].toUpperCase()} ${priceM[2].replace(/,/g, "")}` : "-";
+    const m = parkingDescText.match(/(KRW|JPY|CNY|HKD|USD)\s*([\d,]+)/i);
+    data._parking = "Yes"; data._parking_type = "Paid";
+    data._parking_price = m ? `${m[1].toUpperCase()} ${m[2].replace(/,/g, "")}` : "-";
   } else {
     data._parking = null; data._parking_type = null; data._parking_price = null;
   }
 
   data.room_service = /room\s*service/i.test(text) ? "Yes" : "";
-  data.voltage = {
-    "south korea": "220V", "korea": "220V", "japan": "100V", "china": "220V",
-    "hong kong": "220V", "indonesia": "220V", "vietnam": "220V", "thailand": "220V",
-    "philippines": "220V", "malaysia": "240V", "singapore": "230V",
-  }[countryRaw] || "";
+  data.voltage = { "south korea": "220V", korea: "220V", japan: "100V", china: "220V",
+    "hong kong": "220V", indonesia: "220V", vietnam: "220V", thailand: "220V",
+    philippines: "220V", malaysia: "240V", singapore: "230V" }[countryRaw] || "";
 
   return data;
 };
 
-const hotelAutofillScript = (fieldData) => {
+const hotelDetailsScript = (d) => {
   const results = [];
-  const errorNotif = document.querySelector('.c-notification__message');
-  if (errorNotif && errorNotif.textContent.includes('Failed to fetch data')) {
-    location.reload();
-    return [{ field: "Reload", status: "reloaded" }];
+  if (document.querySelector('.c-notification__message')?.textContent.includes('Failed to fetch data')) {
+    location.reload(); return [{ field: "Reload", status: "reloaded" }];
   }
 
-  if (!fieldData.front_desk_hours) fieldData.front_desk_hours = "Yes";
-  if (!fieldData.checkin_time)     fieldData.checkin_time     = "14:00";
-  if (!fieldData.checkin_end)      fieldData.checkin_end      = "23:59";
-  if (!fieldData.checkout_start)   fieldData.checkout_start   = "00:00";
-  if (!fieldData.checkout_time)    fieldData.checkout_time    = "12:00";
-  if (!fieldData.room_service)     fieldData.room_service     = "No";
-  if (!fieldData.parking)          fieldData.parking          = "No";
-  if (!fieldData.airport_transfer) fieldData.airport_transfer = "No";
+  if (!d.front_desk_hours) d.front_desk_hours = "Yes";
+  if (!d.checkin_time) d.checkin_time = "14:00";
+  if (!d.checkin_end) d.checkin_end = "23:59";
+  if (!d.checkout_start) d.checkout_start = "00:00";
+  if (!d.checkout_time) d.checkout_time = "12:00";
+  if (!d.room_service) d.room_service = "No";
+  if (!d.parking) d.parking = "No";
+  if (!d.airport_transfer) d.airport_transfer = "No";
 
-  const setTimeInput = (inputName, timeStr) => {
-    if (!timeStr) return false;
-    const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  const setInput = (name, value, isYear = false) => {
+    const val = (!value || value === "-") ? (isYear ? "1" : "0") : value;
+    const input = document.querySelector(`input[name="${name}"]`);
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  };
+
+  const setTime = (name, val) => {
+    const m = val?.match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return false;
-    const formatted = `${String(parseInt(m[1])).padStart(2,"0")}:${String(parseInt(m[2])).padStart(2,"0")}`;
-    const input = document.querySelector(`input[name="${inputName}"]`);
-    if (!input) return false;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, formatted);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  };
-
-  const setTextInput = (inputName, value) => {
-    const val = (!value || value === "-") ? "0" : value;
-    const input = document.querySelector(`input[name="${inputName}"]`);
-    if (!input) return false;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, val);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  };
-
-  const setYearInput = (inputName, value) => {
-    const val = (!value || value === "-") ? "1" : value;
-    const input = document.querySelector(`input[name="${inputName}"]`);
-    if (!input) return false;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, val);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
+    return setInput(name, `${String(parseInt(m[1])).padStart(2,"0")}:${String(parseInt(m[2])).padStart(2,"0")}`);
   };
 
   const clickRadio = (name, value) => {
     const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
     if (!radio) return false;
-    radio.click();
-    return true;
+    radio.click(); return true;
   };
 
-  const fdOk = clickRadio("hotel,hotelProperties,frontDeskType",
-    fieldData.front_desk_hours === "Yes" ? "HAS_24_HOUR_FRONT_DESK" : "NOT_HAS_24_HOUR_FRONT_DESK");
-  results.push({ field: "24/7", status: fdOk ? "ok" : "not_found" });
+  const push = (field, ok) => results.push({ field, status: ok ? "ok" : "not_found" });
 
-  if (fieldData.front_desk_hours === "Yes") {
-    results.push({ field: "Check-in Start", status: setTimeInput("hotel,hotelProperties,checkInTime", fieldData.checkin_time) ? "ok" : "not_found" });
-    results.push({ field: "Check-out End", status: setTimeInput("hotel,hotelProperties,checkOutTime", fieldData.checkout_time) ? "ok" : "not_found" });
+  push("24/7", clickRadio("hotel,hotelProperties,frontDeskType", d.front_desk_hours === "Yes" ? "HAS_24_HOUR_FRONT_DESK" : "NOT_HAS_24_HOUR_FRONT_DESK"));
+
+  if (d.front_desk_hours === "Yes") {
+    push("Check-in", setTime("hotel,hotelProperties,checkInTime", d.checkin_time));
+    push("Check-out", setTime("hotel,hotelProperties,checkOutTime", d.checkout_time));
   } else {
-    results.push({ field: "Check-in Start", status: setTimeInput("hotel,hotelProperties,checkInTimeRange-startDate", fieldData.checkin_time) ? "ok" : "not_found" });
-    results.push({ field: "Check-in End", status: setTimeInput("hotel,hotelProperties,checkInTimeRange-endDate", fieldData.checkin_end) ? "ok" : "not_found" });
-    results.push({ field: "Check-out Start", status: setTimeInput("hotel,hotelProperties,checkOutTimeRange-startDate", fieldData.checkout_start) ? "ok" : "not_found" });
-    results.push({ field: "Check-out End", status: setTimeInput("hotel,hotelProperties,checkOutTimeRange-endDate", fieldData.checkout_time) ? "ok" : "not_found" });
+    push("Check-in Start", setTime("hotel,hotelProperties,checkInTimeRange-startDate", d.checkin_time));
+    push("Check-in End", setTime("hotel,hotelProperties,checkInTimeRange-endDate", d.checkin_end));
+    push("Check-out Start", setTime("hotel,hotelProperties,checkOutTimeRange-startDate", d.checkout_start));
+    push("Check-out End", setTime("hotel,hotelProperties,checkOutTimeRange-endDate", d.checkout_time));
   }
 
-  results.push({ field: "Built Year", status: setYearInput("hotel,hotelProperties,builtYear", fieldData.built_year) ? "ok" : "not_found" });
-  results.push({ field: "Renovated Year", status: setYearInput("hotel,hotelProperties,lastRenovatedYear", fieldData.renovated_year) ? "ok" : "not_found" });
-  results.push({ field: "Rooms", status: setTextInput("hotel,hotelProperties,numRooms", fieldData.room_count) ? "ok" : "not_found" });
-  results.push({ field: "Floors", status: setTextInput("hotel,hotelProperties,numFloors", fieldData.floor_count) ? "ok" : "not_found" });
-  results.push({ field: "Restaurants", status: setTextInput("hotel,hotelProperties,numRestaurants", fieldData.restaurant_count) ? "ok" : "not_found" });
-  results.push({ field: "Bars", status: setTextInput("hotel,hotelProperties,numBars", fieldData.bar_count) ? "ok" : "not_found" });
+  push("Built Year", setInput("hotel,hotelProperties,builtYear", d.built_year, true));
+  push("Renovated Year", setInput("hotel,hotelProperties,lastRenovatedYear", d.renovated_year, true));
+  push("Rooms", setInput("hotel,hotelProperties,numRooms", d.room_count));
+  push("Floors", setInput("hotel,hotelProperties,numFloors", d.floor_count));
+  push("Restaurants", setInput("hotel,hotelProperties,numRestaurants", d.restaurant_count));
+  push("Bars", setInput("hotel,hotelProperties,numBars", d.bar_count));
+  push("Voltage", setInput("hotel,hotelProperties,roomVoltage", (d.voltage || "").replace(/[Vv]/g, "")));
+  push("Room Service", clickRadio("hotel,hotelProperties,roomServiceType", d.room_service === "Yes" ? "AVAILABLE" : "NOT_AVAILABLE"));
 
-  const voltageVal = (fieldData.voltage || "").replace(/[Vv]/g, "");
-  results.push({ field: "Voltage", status: setTextInput("hotel,hotelProperties,roomVoltage", voltageVal) ? "ok" : "not_found" });
-  results.push({ field: "Room Service", status: clickRadio("hotel,hotelProperties,roomServiceType", fieldData.room_service === "Yes" ? "AVAILABLE" : "NOT_AVAILABLE") ? "ok" : "not_found" });
+  const pkAvail = d.parking && d.parking !== "No";
+  push("Parking", clickRadio("hotel,hotelProperties,parkingType", pkAvail ? "AVAILABLE" : "NOT_AVAILABLE"));
+  if (pkAvail && d.parking_type) push("Parking Fee", clickRadio("hotel,hotelProperties,parkingFeeType", d.parking_type === "Free" ? "FREE" : "CHARGE"));
+  if (d.breakfast_price && d.breakfast_price !== "-") push("Breakfast", setInput("hotel,hotelProperties,breakfastCharge", d.breakfast_price));
 
-  const pkAvailable = fieldData.parking && fieldData.parking !== "No" && fieldData.parking !== "";
-  results.push({ field: "Parking", status: clickRadio("hotel,hotelProperties,parkingType", pkAvailable ? "AVAILABLE" : "NOT_AVAILABLE") ? "ok" : "not_found" });
-  if (pkAvailable && fieldData.parking_type) {
-    results.push({ field: "Parking Fee Type", status: clickRadio("hotel,hotelProperties,parkingFeeType", fieldData.parking_type === "Free" ? "FREE" : "CHARGE") ? "ok" : "not_found" });
-  }
-
-  if (fieldData.breakfast_price && fieldData.breakfast_price !== "-") {
-    results.push({ field: "Breakfast Price", status: setTextInput("hotel,hotelProperties,breakfastCharge", fieldData.breakfast_price) ? "ok" : "not_found" });
-  }
-
-  const atValue = fieldData.airport_transfer === "Yes" ? "true" : "false";
-  results.push({ field: "Airport Transfer", status: clickRadio("hotel,hotelProperties,isAvailableAirportTransfer", atValue) ? "ok" : "not_found" });
-  if (atValue === "true" && fieldData.airport_transfer_fee && fieldData.airport_transfer_fee !== "-") {
-    results.push({ field: "Transfer Fee", status: setTextInput("hotel,hotelProperties,airportTransferFee", fieldData.airport_transfer_fee) ? "ok" : "not_found" });
-  }
+  const atVal = d.airport_transfer === "Yes" ? "true" : "false";
+  push("Airport Transfer", clickRadio("hotel,hotelProperties,isAvailableAirportTransfer", atVal));
+  if (atVal === "true" && d.airport_transfer_fee && d.airport_transfer_fee !== "-") push("Transfer Fee", setInput("hotel,hotelProperties,airportTransferFee", d.airport_transfer_fee));
 
   const saveBtn = document.querySelector('button.c-btn--variant-orange span');
   if (saveBtn) { saveBtn.closest('button').click(); results.push({ field: "Save", status: "ok" }); }
-  else { results.push({ field: "Save", status: "not_found" }); }
+  else results.push({ field: "Save", status: "not_found" });
 
   return results;
 };
 
-const hotelAddressScript = (fieldData) => {
+const hotelFacilitiesScript = (teraValues) => {
+  for (const value of teraValues) {
+    const cb = document.querySelector(`input[name="hotel,hotelFacility,facilities"][value="${value}"]`);
+    if (cb && !cb.checked) cb.click();
+  }
+  const saveBtn = document.querySelector('button.c-btn--variant-orange span');
+  if (saveBtn) saveBtn.closest('button').click();
+};
+
+const hotelAddressScript = (d) => {
   const results = [];
 
-  const setTextInput = (inputName, value) => {
+  const setTextInput = (name, value) => {
     if (!value || value === "-") return false;
-    const input = document.querySelector(`input[name="${inputName}"]`);
+    const input = document.querySelector(`input[name="${name}"]`);
     if (!input) return false;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     setter.call(input, value);
@@ -1394,15 +900,15 @@ const hotelAddressScript = (fieldData) => {
     return true;
   };
 
-  results.push({ field: "Postal Code", status: setTextInput("hotel,globalAddress,postalCode", fieldData.postal_code) ? "ok" : "not_found" });
+  results.push({ field: "Postal Code", status: setTextInput("hotel,globalAddress,postalCode", d.postal_code) ? "ok" : "not_found" });
 
-  if (fieldData.address && fieldData.address !== "-") {
+  if (d.address && d.address !== "-") {
     const yesRadio = document.querySelector('input[type="radio"][value="yes"]');
     if (yesRadio) {
       yesRadio.click();
       yesRadio.dispatchEvent(new Event('change', { bubbles: true }));
       results.push({ field: "Local Address Yes", status: "ok" });
-      results.push({ field: "Local Address", status: setTextarea("hotel,localAddress,lines", fieldData.address) ? "ok" : "not_found" });
+      results.push({ field: "Local Address", status: setTextarea("hotel,localAddress,lines", d.address) ? "ok" : "not_found" });
     } else {
       results.push({ field: "Local Address Yes", status: "not_found" });
     }
@@ -1410,92 +916,284 @@ const hotelAddressScript = (fieldData) => {
 
   const saveBtn = document.querySelector('button.c-btn--variant-orange span');
   if (saveBtn) { saveBtn.closest('button').click(); results.push({ field: "Address Save", status: "ok" }); }
-  else { results.push({ field: "Address Save", status: "not_found" }); }
+  else results.push({ field: "Address Save", status: "not_found" });
 
   return results;
 };
 
+// ── Hotel Info API ──
+const fetchLocalData = async (hotelId, locale) => {
+  const today = new Date();
+  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, "");
+  const checkIn = fmt(today);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const checkOut = fmt(tomorrow);
+  try {
+    const res = await fetch("https://www.trip.com/restapi/soa2/33269/getHotelDetailAggregate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hotelId: parseInt(hotelId), checkIn, checkOut,
+        adult: 2, child: 0, childrenAgeList: [], roomQuantity: 1, isBusiness: false,
+        location: { geo: { cityID: 0 } }, mapType: "", extra: { useHotPoiQuery: true },
+        feature: [], filterInfoList: [], hotelCertificateSwitch: "F",
+        hotelInfoOptions: [{ key: "HotelStay", value: "T" }, { key: "InterHome", value: "T" }],
+        policyOptions: ["divideHotelPolicy", "EnableNewPetPolicy", "EnableChildrenTipPopLayer", "JapanChildPriceSwitch"],
+        policyPageCode: "trip-hotel-detail",
+        versionControl: [{ key: "EnableFacilityV2", value: "B" }, { key: "UseTokenIcon", value: "T" }, { key: "MVPv2", value: "T" }],
+        head: { platform: "PC", cver: "0", bu: "IBU", group: "trip", locale }
+      })
+    });
+    return (await res.json())?.data || null;
+  } catch (e) { return null; }
+};
+
+// ── Tera Hotel Autofill ──
 async function runHotelAutofill(tabId) {
   setExtractStatus(t().hotelAutofillDetails);
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: hotelAutofillScript,
-      args: [currentHotelData],
-    });
-
+    const results = await exec(tabId, hotelDetailsScript, [currentHotelData]);
     const res = results?.[0]?.result || [];
-    if (res.find(r => r.field === "Reload")) {
-      setExtractStatus(t().hotelAutofillReload, "error");
-      return;
+    if (res.find(r => r.field === "Reload")) { setExtractStatus(t().hotelAutofillReload, "error"); return; }
+    await sleep(2000);
+
+    // Facilities 탭
+    if (currentHotelData._tripFacilities?.length > 0) {
+      setExtractStatus(t().hotelAutofillFacilities);
+      await exec(tabId, () => Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Facilities")?.click());
+      await sleep(1500);
+      const teraValues = getTeraFacilities(currentHotelData._tripFacilities);
+      await exec(tabId, hotelFacilitiesScript, [teraValues]);
+      await sleep(2000);
     }
 
-    await new Promise(r => setTimeout(r, 2000));
-
+    // Overview 탭
     setExtractStatus(t().hotelAutofillOverview);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const tab = Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Overview");
-        if (tab) tab.click();
-      }
-    });
-    await new Promise(r => setTimeout(r, 1500));
+    await exec(tabId, () => Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Overview")?.click());
+    await sleep(1500);
+    await exec(tabId, (name) => {
+      if (!name) return;
+      const input = document.querySelector('input[name="hotel,accommodationLocaleName"]');
+      if (!input) return;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, name);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector('button.c-btn--variant-orange span')?.closest('button').click();
+    }, [currentHotelData.name_local || ""]);
+    await sleep(2000);
 
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (localName) => {
-        if (!localName) return;
-        const input = document.querySelector('input[name="hotel,accommodationLocaleName"]');
-        if (!input) return;
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        setter.call(input, localName);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        const saveBtn = document.querySelector('button.c-btn--variant-orange span');
-        if (saveBtn) saveBtn.closest('button').click();
-      },
-      args: [currentHotelData.name_local || ""]
-    });
-
-    await new Promise(r => setTimeout(r, 2000));
-
+    // Address 탭
     setExtractStatus(t().hotelAutofillAddress);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const tab = Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Address");
-        if (tab) tab.click();
-      }
-    });
+    await exec(tabId, () => Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Address")?.click());
 
     for (let i = 0; i < 6; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      const popupResult = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => {
-          const confirmBtn = Array.from(document.querySelectorAll('button.c-btn--variant-orange span'))
-            .find(el => el.textContent.trim().includes('Yes, move'));
-          if (confirmBtn) { confirmBtn.closest('button').click(); return true; }
-          return false;
-        }
+      await sleep(500);
+      const r = await exec(tabId, () => {
+        const btn = Array.from(document.querySelectorAll('button.c-btn--variant-orange span')).find(el => el.textContent.trim().includes('Yes, move'));
+        if (btn) { btn.closest('button').click(); return true; }
+        return false;
       });
-      if (popupResult?.[0]?.result) break;
+      if (r?.[0]?.result) break;
     }
 
-    await new Promise(r => setTimeout(r, 1500));
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: hotelAddressScript,
-      args: [currentHotelData],
-    });
-
+    await sleep(1500);
+    await exec(tabId, hotelAddressScript, [currentHotelData]);
     setExtractStatus(t().hotelAutofillDone, "success");
   } catch (e) {
     setExtractStatus("Error: " + e.message, "error");
   }
 }
 
+// ── API 데이터 처리 공통 함수 ──
+async function processApiData(data, apiData) {
+  if (apiData) {
+    const baseInfo = apiData.hotelBaseInfo || {};
+    const nameInfo = baseInfo.nameInfo || {};
+    data.name_local = nameInfo.nameLocale || nameInfo.name || data.name_en;
+    if (baseInfo.openYear) data.built_year = String(baseInfo.openYear);
+    if (baseInfo.lastRenovateYear) data.renovated_year = String(baseInfo.lastRenovateYear);
+    const rawAddr = apiData.hotelPositionInfo?.address || "";
+    const cleanAddr = rawAddr.replace(/show on map/gi, "").replace(/,?\s*\d{5}\s*,?/g, "").replace(/,\s*,/g, ",").replace(/,\s*$/, "").trim();
+    if (cleanAddr) data.address = cleanAddr;
+    let restaurantCount = 0, barCount = 0;
+    for (const cat of apiData.hotelFacilityPopV2?.hotelFacility || []) {
+      if (cat.categoryId === 8) restaurantCount = cat.categoryList?.[0]?.list?.length || 0;
+      if (cat.categoryId === 7) barCount = cat.categoryList?.[0]?.list?.length || 0;
+    }
+    data.restaurant_count = restaurantCount > 0 ? String(restaurantCount) : "-";
+    data.bar_count = barCount > 0 ? String(barCount) : "-";
+    // Trip.com 시설 원본 저장 (Tera Facilities 자동체크용)
+    data._tripFacilities = (apiData.hotelFacilityPopV2?.hotelFacility || [])
+      .flatMap(cat => (cat.categoryList || []).flatMap(g => g.list || []));
+  } else {
+    data.restaurant_count = "-"; data.bar_count = "-";
+    data._tripFacilities = [];
+  }
+  data.parking = data._parking ?? "";
+  data.parking_type = data._parking_type ?? "-";
+  data.parking_price = data._parking_price ?? "-";
+  delete data._countryRaw; delete data._hotelId;
+  delete data._parking; delete data._parking_type; delete data._parking_price;
+  return data;
+}
+
+// ── Event Listeners ──
+
+// Room Autofill
+document.getElementById("teraBtn").addEventListener("click", async () => {
+  if (roomData.length === 0) { setTeraStatus(t().teraNoRooms, "error"); return; }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab.url?.includes("tera.traveloka.com")) { setTeraStatus(t().teraNotTera, "error"); return; }
+
+  const btn = document.getElementById("teraBtn");
+  btn.disabled = true;
+  document.getElementById("pauseToggleBtn").style.display = "block";
+  isPaused = false;
+  try {
+    for (let i = 0; i < roomData.length; i++) {
+      const room = roomData[i];
+      if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
+      setTeraStatus(t().teraRunning(i + 1, roomData.length));
+      await teraFillOneRoom(tab.id, room, matchRoomType(room.roomName));
+      await waitForContinue(room.roomName);
+      await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
+      await sleep(1500);
+      await exec(tab.id, () => {
+        Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click();
+      });
+      await sleep(3000);
+      while (true) {
+        const check = await exec(tab.id, () => !!document.querySelector('[data-id="IcSystemStatusFail16"]'));
+        if (!check?.[0]?.result) break;
+        await waitForContinue(room.roomName, true);
+        await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
+        await sleep(1500);
+      }
+      await sleep(800);
+    }
+    setTeraStatus(t().teraDone(roomData.length), "success");
+  } catch (err) {
+    setTeraStatus(t().teraError(err.message), "error");
+  }
+  document.getElementById("pauseToggleBtn").style.display = "none";
+  isPaused = false;
+  btn.disabled = false;
+});
+
+// Room Scan
+document.getElementById("startBtn").addEventListener("click", async () => {
+  const hotelName = document.getElementById("hotelName").value.trim();
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true;
+  roomData = [];
+  setTeraStatus("");
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab.url?.includes("trip.com/hotels")) {
+      setStatus(t().notTripPage, "error");
+      btn.disabled = false;
+      return;
+    }
+
+    setStatus(t().scan1);
+    const result = await scanTab(tab.id);
+    const hotelPhotos = result.hotelPhotos || [];
+    const allRooms = new Map();
+    (result.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
+    setStatus(t().scan1done(allRooms.size, hotelPhotos.length));
+
+    const finalRooms = [...allRooms.values()];
+    if (finalRooms.length === 0) { setStatus(t().noRooms, "error"); btn.disabled = false; return; }
+
+    roomData = finalRooms;
+    chrome.storage.session.set({ roomData: finalRooms });
+
+    const roomList = document.getElementById("roomList");
+    roomList.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="checkAll" checked> All</label></div>`;
+    finalRooms.forEach((room, i) => {
+      const item = document.createElement("div");
+      item.className = "room-item";
+      item.innerHTML = `<input type="checkbox" class="room-cb" data-index="${i}" checked><span>${room.roomName}</span>`;
+      item.querySelector('span').onclick = () => item.querySelector('input').click();
+      roomList.appendChild(item);
+    });
+    document.getElementById("checkAll").addEventListener("change", (e) => {
+      document.querySelectorAll(".room-cb").forEach(cb => cb.checked = e.target.checked);
+    });
+    roomList.style.display = "block";
+    document.getElementById("selectFillBtn").style.display = "block";
+
+    if (typeof JSZip === "undefined") { setStatus(t().noJszip(finalRooms.length), "success"); btn.disabled = false; return; }
+
+    setStatus(t().zipping);
+    const zip = new JSZip();
+    const folderName = sanitizeName(hotelName || String(Date.now()));
+    const hotelFolder = zip.folder(folderName);
+    const normalizeUrl = url => url.split('?')[0].trim();
+    let photoCount = 0;
+
+    const processChunk = async (urls) => Promise.all(urls.map(async (url) => {
+      const ext = url.includes(".webp") ? "jpg" : (url.match(/\.(jpg|jpeg|png)/i)?.[1] || "jpg");
+      try {
+        const urlLow = isLowQualityUrl(url);
+        const res = await fetch(url);
+        let blob = await res.blob();
+        let low = false;
+        if (urlLow) { low = true; }
+        else { const r = await checkAndUpscale(blob); blob = r.blob; low = r.isLow; }
+        return { blob, low, ext };
+      } catch { return null; }
+    }));
+
+    for (const room of finalRooms) {
+      if (!room.roomPhotos?.length) continue;
+      const roomFolder = hotelFolder.folder(sanitizeName(room.roomName));
+      let idx = 1;
+      const seen = new Set();
+      const unique = room.roomPhotos.filter(url => { if (!url || seen.has(normalizeUrl(url))) return false; seen.add(normalizeUrl(url)); return true; });
+      for (let i = 0; i < unique.length; i += 6) {
+        for (const r of await processChunk(unique.slice(i, i + 6))) {
+          if (!r) continue;
+          roomFolder.file(`${String(idx).padStart(2,"0")}${r.low ? "_LOW_QUALITY" : ""}.${r.ext}`, r.blob);
+          idx++; photoCount++;
+        }
+      }
+    }
+
+    if (hotelPhotos.length > 0) {
+      const photoFolder = hotelFolder.folder("Hotel Photo");
+      const seen = new Set();
+      const unique = hotelPhotos.filter(url => { if (!url || seen.has(normalizeUrl(url))) return false; seen.add(normalizeUrl(url)); return true; });
+      let idx = 1;
+      for (let i = 0; i < unique.length; i += 6) {
+        for (const r of await processChunk(unique.slice(i, i + 6))) {
+          if (!r) continue;
+          photoFolder.file(`${String(idx).padStart(2,"0")}${r.low ? "_LOW_QUALITY" : ""}.${r.ext}`, r.blob);
+          idx++; photoCount++;
+        }
+      }
+    }
+
+    if (photoCount > 0) {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `${folderName}_photos.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setStatus(t().done(finalRooms.length, photoCount), "success");
+    } else {
+      setStatus(t().noPhotos(finalRooms.length), "success");
+    }
+  } catch (err) {
+    console.error("[Tera] 에러:", err);
+    setStatus("Error: " + err.message, "error");
+  }
+  btn.disabled = false;
+});
+
+// Hotel Scan for Tera (Extract + Sheet)
 document.getElementById("extractBtn").addEventListener("click", async () => {
   const btn = document.getElementById("extractBtn");
   btn.disabled = true;
@@ -1504,70 +1202,82 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url?.includes("trip.com")) {
-      setExtractStatus(t().extractNotTrip, "error");
-      return;
-    }
+    if (!tab.url?.includes("trip.com")) { setExtractStatus(t().extractNotTrip, "error"); return; }
 
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractScript,
-    });
-
+    const results = await exec(tab.id, extractScript);
     const data = results?.[0]?.result;
     if (!data) { setExtractStatus(t().extractFail, "error"); return; }
 
-    const countryRaw = data._countryRaw || "";
-    const locale = COUNTRY_LOCALE_MAP[countryRaw] || "en-XX";
-
-    const localApiData = await fetchLocalData(data._hotelId, locale);
-    if (localApiData) {
-      const nameInfo = localApiData.hotelBaseInfo?.nameInfo || {};
-      data.name_local = nameInfo.nameLocale || nameInfo.name || data.name_en;
-      const rawAddr = localApiData.hotelPositionInfo?.address || "";
-      const cleanAddr = rawAddr.replace(/show on map/gi, "").replace(/,?\s*\d{5}\s*,?/g, "").replace(/,\s*,/g, ",").replace(/,\s*$/, "").trim();
-      if (cleanAddr) data.address = cleanAddr;
-      let restaurantCount = 0, barCount = 0;
-      for (const cat of localApiData.hotelFacilityPopV2?.hotelFacility || []) {
-        for (const group of cat.categoryList || []) {
-          for (const item of group.list || []) {
-            const desc = (item.facilityDesc || "").toLowerCase();
-            if (desc.includes("restaurant") || desc.includes("cafe") || desc.includes("dining")) restaurantCount++;
-            if (desc.includes("bar") || desc.includes("lounge")) barCount++;
-          }
-        }
-      }
-      data.restaurant_count = restaurantCount > 0 ? String(restaurantCount) : "-";
-      data.bar_count = barCount > 0 ? String(barCount) : "-";
-    } else {
-      data.restaurant_count = "-";
-      data.bar_count = "-";
-    }
-
-    if (data._parking !== null && data._parking !== undefined) {
-      data.parking = data._parking;
-      data.parking_type = data._parking_type;
-      data.parking_price = data._parking_price;
-    } else {
-      data.parking = "";
-      data.parking_type = "-";
-      data.parking_price = "-";
-    }
-
-    delete data._countryRaw;
-    delete data._hotelId;
-    delete data._parking;
-    delete data._parking_type;
-    delete data._parking_price;
+    const locale = COUNTRY_LOCALE_MAP[data._countryRaw] || "en-XX";
+    const apiData = await fetchLocalData(data._hotelId, locale);
+    await processApiData(data, apiData);
 
     currentHotelData = data;
     setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
 
-    const allTabs = await chrome.tabs.query({});
-    const teraTab = allTabs.find(t => t.url?.includes("traveloka.com"));
-    if (teraTab) {
-      await runHotelAutofill(teraTab.id);
-    }
+    // Sheet 전송
+    await exec(tab.id, (d) => {
+      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz384ObCq18jDZIpzbmTDOQOSO00a62xS7urqFoIV1ksyxhPz3-rkpkcn6KCf6OEGGG/exec";
+      const hotelFacilityMap = [
+        {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},{keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
+        {keywords:["private pool"],code:"PRIVATE_POOL"},{keywords:["shower"],code:"SHOWER"},{keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
+        {keywords:["bathtub"],code:"BATHTUB"},{keywords:["hot water","heated water"],code:"HEATED_WATER"},{keywords:["air conditioning"],code:"AIR_CONDITIONING"},
+        {keywords:["hair dryer"],code:"HAIR_DRYER"},{keywords:["desk"],code:"DESK"},
+        {keywords:["free wi-fi","wi-fi in public","wi-fi in room","wifi","free internet"],code:"INTERNET_ACCESS_WIFI_COMPLIMENTARY"},
+        {keywords:["microwave"],code:"MICROWAVE"},{keywords:["washing machine"],code:"WASHING_MACHINE"},{keywords:["iron","ironing"],code:"IRONING_FACILITIES"},
+        {keywords:["shared bathroom"],code:"SHARED_BATHROOM"},{keywords:["television","lcd tv"],code:"TELEVISION"},{keywords:["refrigerator"],code:"REFRIGERATOR"},
+        {keywords:["mini bar","minibar"],code:"MINI_BAR"},{keywords:["electric kettle","coffee","tea"],code:"COFFEE_TEA_MAKER"},
+        {keywords:["bottled water"],code:"COMPLIMENTARY_BOTTLED_WATER"}
+      ];
+      function extractFacilities(list) {
+        const texts = [];
+        list.forEach(cat => {
+          if (cat.title) texts.push(cat.title.toLowerCase());
+          (cat.categoryList || []).forEach(g => (g.list || []).forEach(item => { if (item.facilityDesc) texts.push(item.facilityDesc.toLowerCase()); }));
+        });
+        const combined = texts.join(" ");
+        const result = [];
+        hotelFacilityMap.forEach(item => { if (item.keywords.some(k => combined.includes(k)) && !result.includes(item.code)) result.push(item.code); });
+        return result.join(", ");
+      }
+      const scripts = [...document.querySelectorAll('script')];
+      const text = scripts.map(s => s.innerText).join(' ');
+      const coords = text.match(/(\d{2,3}\.\d{4,})[^\d.]{1,30}(\d{2,3}\.\d{4,})/);
+      const lat = coords ? parseFloat(coords[1]).toFixed(4) : "";
+      const lng = coords ? parseFloat(coords[2]).toFixed(4) : "";
+      const hotelName = document.querySelector('h1')?.innerText.trim() || "";
+      const addressEl = document.querySelector('[class*="address"],[class*="Address"]');
+      const rawAddress = addressEl ? addressEl.innerText.trim().replace(/show on map/gi, "").trim() : "";
+      const filtered = rawAddress.split(",").map(p => p.trim()).filter(p => !/^\d{4,}$/.test(p) && !/south korea|korea|japan|thailand|indonesia|singapore|malaysia|vietnam|philippines|taiwan|china|australia|india|united arab emirates|saudi|new zealand|fiji|macau|hong kong/i.test(p));
+      const address = filtered.reverse().join(", ");
+      const starEl = document.querySelector('[class*="hotelStarLevel"]');
+      const starRating = starEl ? (starEl.getAttribute('aria-label') || "0") : "0";
+      const policyEls = document.querySelectorAll('[class*="hotelPolicyNew_hotelPolicy-check_desc"]');
+      const checkInRaw = policyEls[0]?.innerText.trim() || "";
+      const checkOutRaw = policyEls[1]?.innerText.trim() || "";
+      const checkIn = checkInRaw.match(/\d{1,2}:\d{2}/)?.[0] || "14:00";
+      const checkOut = checkOutRaw.match(/\d{1,2}:\d{2}/)?.[0] || "12:00";
+      const a = rawAddress.toLowerCase();
+      let currency = "KRW";
+      const currencyMap = [["japan","JPY"],["hong kong","HKD"],["thailand","THB"],["indonesia","IDR"],["singapore","SGD"],["malaysia","MYR"],["vietnam","VND"],["philippines","PHP"],["taiwan","TWD"],["china","CNY"],["australia","AUD"],["india","INR"],["united arab emirates|uae","AED"],["saudi","SAR"],["new zealand","NZD"],["fiji","FJD"],["macau|macao","MOP"]];
+      for (const [re, cur] of currencyMap) { if (new RegExp(re).test(a)) { currency = cur; break; } }
+      const n = hotelName.toLowerCase();
+      let accommodationType = "HOTEL";
+      if (/resort/.test(n)) accommodationType = "RESORT";
+      else if (/hostel|backpacker/.test(n)) accommodationType = "HOSTEL_BACKPACKER_ACCOMMODATION";
+      else if (/villa/.test(n)) accommodationType = "VILLA";
+      else if (/apartment|apart/.test(n)) accommodationType = "APARTMENT";
+      else if (/capsule/.test(n)) accommodationType = "CAPSULE_HOTEL";
+      else if (/aparthotel/.test(n)) accommodationType = "APARTHOTEL";
+      else if (/guesthouse|guest house/.test(n)) accommodationType = "GUESTHOUSE";
+      const nd = window.__NEXT_DATA__;
+      const facilityData = nd?.props?.pageProps?.hotelDetailResponse?.hotelFacilityPopV2?.hotelFacility;
+      const hotelFacilities = facilityData ? extractFacilities(facilityData) : "";
+      fetch(HOTEL_WEB_APP_URL, {
+        method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities })
+      });
+    }, [currentHotelData], "MAIN");
 
   } catch (e) {
     setExtractStatus("Error: " + e.message, "error");
@@ -1576,122 +1286,100 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
   }
 });
 
+// Hotel Detail Insert (Tera Autofill)
 document.getElementById("sheetBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab.url?.includes("trip.com")) {
-    setExtractStatus(t().extractNotTrip, "error");
+  const btn = document.getElementById("sheetBtn");
+
+  if (!currentHotelData) {
+    if (!tab.url?.includes("trip.com")) { setExtractStatus(t().extractNotTrip, "error"); return; }
+    btn.disabled = true;
+    setExtractStatus(t().extracting);
+    try {
+      const results = await exec(tab.id, extractScript);
+      const data = results?.[0]?.result;
+      if (!data) { setExtractStatus(t().extractFail, "error"); return; }
+      const locale = COUNTRY_LOCALE_MAP[data._countryRaw] || "en-XX";
+      const apiData = await fetchLocalData(data._hotelId, locale);
+      await processApiData(data, apiData);
+      currentHotelData = data;
+      setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
+    } catch (e) {
+      setExtractStatus("Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
     return;
   }
 
+  if (!tab.url?.includes("tera.traveloka.com")) { setExtractStatus(t().hotelInsertNotTera, "error"); return; }
+  btn.disabled = true;
+  await runHotelAutofill(tab.id);
+  btn.disabled = false;
+});
+
+// Init
+setLang(currentLang);
+document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
+document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
+checkForUpdates();
+
+// Reset
+document.getElementById("resetBtn").addEventListener("click", () => {
+  currentHotelData = null;
+  roomData = [];
+  chrome.storage.session.remove('roomData');
+  setStatus(t().defaultStatus);
+  setTeraStatus("");
+  setExtractStatus("");
+  document.getElementById("roomList").style.display = "none";
+  document.getElementById("pauseToggleBtn").style.display = "none";
+  document.getElementById("selectFillBtn").style.display = "none";
+});
+
+// Pause Toggle
+document.getElementById("pauseToggleBtn").addEventListener("click", () => {
+  isPaused = !isPaused;
+  document.getElementById("pauseToggleBtn").textContent = isPaused ? "Resume" : "Pause";
+  document.getElementById("pauseToggleBtn").className = isPaused ? "btn-primary" : "btn-warning";
+  if (!isPaused && pauseResolve) { pauseResolve(); pauseResolve = null; }
+});
+
+// Selectfill
+document.getElementById("selectFillBtn").addEventListener("click", async () => {
+  const selected = Array.from(document.querySelectorAll(".room-cb:checked")).map(cb => roomData[parseInt(cb.dataset.index)]);
+  if (selected.length === 0) { setTeraStatus(currentLang === 'kr' ? "선택된 방이 없어요." : "No rooms selected.", "error"); return; }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab.url?.includes("tera.traveloka.com")) { setTeraStatus(t().teraNotTera, "error"); return; }
+  const btn = document.getElementById("selectFillBtn");
+  btn.disabled = true;
+  document.getElementById("pauseToggleBtn").style.display = "block";
+  isPaused = false;
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: "MAIN",
-      func: () => {
-        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz384ObCq18jDZIpzbmTDOQOSO00a62xS7urqFoIV1ksyxhPz3-rkpkcn6KCf6OEGGG/exec";
-        const hotelFacilityMap = [
-          {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},
-          {keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
-          {keywords:["private pool"],code:"PRIVATE_POOL"},
-          {keywords:["shower"],code:"SHOWER"},
-          {keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
-          {keywords:["bathtub"],code:"BATHTUB"},
-          {keywords:["hot water","heated water"],code:"HEATED_WATER"},
-          {keywords:["air conditioning"],code:"AIR_CONDITIONING"},
-          {keywords:["hair dryer"],code:"HAIR_DRYER"},
-          {keywords:["desk"],code:"DESK"},
-          {keywords:["free wi-fi","wi-fi in public","wi-fi in room","wifi","free internet"],code:"INTERNET_ACCESS_WIFI_COMPLIMENTARY"},
-          {keywords:["microwave"],code:"MICROWAVE"},
-          {keywords:["washing machine"],code:"WASHING_MACHINE"},
-          {keywords:["iron","ironing"],code:"IRONING_FACILITIES"},
-          {keywords:["shared bathroom"],code:"SHARED_BATHROOM"},
-          {keywords:["television","lcd tv"],code:"TELEVISION"},
-          {keywords:["refrigerator"],code:"REFRIGERATOR"},
-          {keywords:["mini bar","minibar"],code:"MINI_BAR"},
-          {keywords:["electric kettle","coffee","tea"],code:"COFFEE_TEA_MAKER"},
-          {keywords:["bottled water"],code:"COMPLIMENTARY_BOTTLED_WATER"}
-        ];
-
-        function extractFacilities(list) {
-          const texts = [];
-          list.forEach(cat => {
-            if (cat.title) texts.push(cat.title.toLowerCase());
-            if (cat.categoryList) cat.categoryList.forEach(g => {
-              if (g.list) g.list.forEach(item => {
-                if (item.facilityDesc) texts.push(item.facilityDesc.toLowerCase());
-              });
-            });
-          });
-          const combined = texts.join(" ");
-          const result = [];
-          hotelFacilityMap.forEach(item => {
-            if (item.keywords.some(k => combined.includes(k)) && !result.includes(item.code))
-              result.push(item.code);
-          });
-          return result.join(", ");
-        }
-
-        const scripts = [...document.querySelectorAll('script')];
-        const text = scripts.map(s => s.innerText).join(' ');
-        const coords = text.match(/(\d{2,3}\.\d{4,})[^\d.]{1,30}(\d{2,3}\.\d{4,})/);
-        const lat = coords ? parseFloat(coords[1]).toFixed(4) : "";
-        const lng = coords ? parseFloat(coords[2]).toFixed(4) : "";
-        const hotelName = document.querySelector('h1')?.innerText.trim() || "";
-        const addressEl = document.querySelector('[class*="address"],[class*="Address"]');
-        const rawAddress = addressEl ? addressEl.innerText.trim().replace(/show on map/gi, "").trim() : "";
-        const addressParts = rawAddress.split(",").map(p => p.trim()).filter(Boolean);
-        const filtered = addressParts.filter(p => !/^\d{4,}$/.test(p) && !/south korea|korea|japan|thailand|indonesia|singapore|malaysia|vietnam|philippines|taiwan|china|australia|india|united arab emirates|saudi|new zealand|fiji|macau|hong kong/i.test(p));
-        const address = filtered.reverse().join(", ");
-        const starEl = document.querySelector('[class*="hotelStarLevel"]');
-        const starRating = starEl ? (starEl.getAttribute('aria-label') || "0") : "0";
-        const policyEls = document.querySelectorAll('[class*="hotelPolicyNew_hotelPolicy-check_desc"]');
-        const checkInRaw = policyEls[0] ? policyEls[0].innerText.trim() : "";
-        const checkOutRaw = policyEls[1] ? policyEls[1].innerText.trim() : "";
-        const checkIn = checkInRaw.match(/\d{1,2}:\d{2}/) ? checkInRaw.match(/\d{1,2}:\d{2}/)[0] : "14:00";
-        const checkOut = checkOutRaw.match(/\d{1,2}:\d{2}/) ? checkOutRaw.match(/\d{1,2}:\d{2}/)[0] : "12:00";
-        const a = rawAddress.toLowerCase();
-        let currency = "KRW";
-        if (/japan/.test(a)) currency = "JPY";
-        else if (/hong kong/.test(a)) currency = "HKD";
-        else if (/thailand/.test(a)) currency = "THB";
-        else if (/indonesia/.test(a)) currency = "IDR";
-        else if (/singapore/.test(a)) currency = "SGD";
-        else if (/malaysia/.test(a)) currency = "MYR";
-        else if (/vietnam/.test(a)) currency = "VND";
-        else if (/philippines/.test(a)) currency = "PHP";
-        else if (/taiwan/.test(a)) currency = "TWD";
-        else if (/china/.test(a)) currency = "CNY";
-        else if (/australia/.test(a)) currency = "AUD";
-        else if (/india/.test(a)) currency = "INR";
-        else if (/united arab emirates|uae/.test(a)) currency = "AED";
-        else if (/saudi/.test(a)) currency = "SAR";
-        else if (/new zealand/.test(a)) currency = "NZD";
-        else if (/fiji/.test(a)) currency = "FJD";
-        else if (/macau|macao/.test(a)) currency = "MOP";
-        const n = hotelName.toLowerCase();
-        let accommodationType = "HOTEL";
-        if (/resort/.test(n)) accommodationType = "RESORT";
-        else if (/hostel|backpacker/.test(n)) accommodationType = "HOSTEL_BACKPACKER_ACCOMMODATION";
-        else if (/villa/.test(n)) accommodationType = "VILLA";
-        else if (/apartment|apart/.test(n)) accommodationType = "APARTMENT";
-        else if (/capsule/.test(n)) accommodationType = "CAPSULE_HOTEL";
-        else if (/aparthotel/.test(n)) accommodationType = "APARTHOTEL";
-        else if (/guesthouse|guest house/.test(n)) accommodationType = "GUESTHOUSE";
-        const nd = window.__NEXT_DATA__;
-        const facilityData = nd?.props?.pageProps?.hotelDetailResponse?.hotelFacilityPopV2?.hotelFacility;
-        const hotelFacilities = facilityData ? extractFacilities(facilityData) : "";
-        fetch(HOTEL_WEB_APP_URL, {
-          method: "POST", mode: "no-cors",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities })
-        });
-        return { hotelName, hotelFacilities };
+    for (let i = 0; i < selected.length; i++) {
+      const room = selected[i];
+      if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
+      setTeraStatus(t().teraRunning(i + 1, selected.length));
+      await teraFillOneRoom(tab.id, room, matchRoomType(room.roomName));
+      await waitForContinue(room.roomName);
+      await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
+      await sleep(1500);
+      await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
+      await sleep(3000);
+      while (true) {
+        const check = await exec(tab.id, () => !!document.querySelector('[data-id="IcSystemStatusFail16"]'));
+        if (!check?.[0]?.result) break;
+        await waitForContinue(room.roomName, true);
+        await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
+        await sleep(1500);
       }
-    });
-
-    const r = results?.[0]?.result;
-    setExtractStatus(`${r?.hotelName || ''} | ${r?.hotelFacilities || '없음'}`, "success");
-  } catch(e) {
-    setExtractStatus("Error: " + e.message, "error");
+      await sleep(800);
+    }
+    setTeraStatus(t().teraDone(selected.length), "success");
+  } catch (err) {
+    setTeraStatus(t().teraError(err.message), "error");
   }
+  btn.disabled = false;
+  document.getElementById("pauseToggleBtn").style.display = "none";
+  isPaused = false;
 });

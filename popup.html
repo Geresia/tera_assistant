@@ -63,12 +63,18 @@
       text-transform: uppercase;
       margin-bottom: 10px;
     }
+    .section-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
     .divider {
       height: 0.5px;
       background: #e5e5ea;
       margin-bottom: 24px;
     }
-    input {
+    input[type="text"] {
       width: 100%;
       padding: 9px 12px;
       border: 0.5px solid #d1d1d6;
@@ -81,15 +87,20 @@
       transition: all 0.15s;
       margin-bottom: 10px;
     }
-    input:focus {
+    input[type="text"]:focus {
       border-color: #0071e3;
       background: #fff;
       box-shadow: 0 0 0 3px rgba(0,113,227,0.1);
     }
-    input::placeholder { color: #aeaeb2; }
+    input[type="text"]::placeholder { color: #aeaeb2; }
     .btn-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 8px;
     }
     button {
@@ -110,6 +121,19 @@
     .btn-dark { background: #1d1d1f; color: #fff; }
     .btn-dark:hover:not(:disabled) { opacity: 0.82; }
     .btn-dark:active:not(:disabled) { transform: scale(0.98); }
+    .btn-gray {
+      background: #f5f5f7;
+      color: #1d1d1f;
+      border: 0.5px solid #e5e5ea;
+    }
+    .btn-gray:hover:not(:disabled) { background: #e5e5ea; }
+    .btn-gray:active:not(:disabled) { transform: scale(0.98); }
+    .btn-warning {
+      background: #ff9500;
+      color: #fff;
+    }
+    .btn-warning:hover:not(:disabled) { background: #e6860a; }
+    .btn-warning:active:not(:disabled) { transform: scale(0.98); }
     .status {
       margin-top: 10px;
       font-size: 12px;
@@ -118,6 +142,53 @@
     }
     .status.success { color: #1a7f4b; }
     .status.error { color: #d93025; }
+
+    /* Room List Checkboxes */
+    #roomList {
+      display: none;
+      margin-top: 10px;
+      border: 0.5px solid #e5e5ea;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .room-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-bottom: 0.5px solid #f0f0f5;
+      font-size: 12px;
+      color: #1d1d1f;
+      cursor: pointer;
+    }
+    .room-item:last-child { border-bottom: none; }
+    .room-item:hover { background: #f5f5f7; }
+    .room-item input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      padding: 0;
+      border-radius: 4px;
+      accent-color: #0071e3;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .room-check-all {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #86868b;
+      cursor: pointer;
+    }
+    .room-check-all input[type="checkbox"] {
+      width: 13px;
+      height: 13px;
+      accent-color: #0071e3;
+    }
+
+    /* Pause Box */
     #pauseBox {
       display: none;
       padding-top: 4px;
@@ -153,7 +224,7 @@
   <div id="updateBanner"></div>
 
   <div class="header">
-    <div class="title">Room <em>Scraper</em></div>
+    <div class="title">Tera <em>Assistant</em></div>
     <div class="lang-toggle">
       <button class="lang-btn active" id="btnKR">KR</button>
       <button class="lang-btn" id="btnEN">EN</button>
@@ -163,8 +234,8 @@
   <div class="section">
     <div class="section-label">Hotel Info</div>
     <div class="btn-row">
-      <button class="btn-primary" id="extractBtn">Hotel Detail</button>
-      <button class="btn-dark" id="sheetBtn">Hotel Scraper</button>
+      <button class="btn-primary" id="extractBtn">Hotel Scan for Tera</button>
+      <button class="btn-dark" id="sheetBtn">Hotel Detail Insert</button>
     </div>
     <div id="extractStatus" class="status"></div>
   </div>
@@ -172,14 +243,30 @@
   <div class="divider"></div>
 
   <div class="section">
-    <div class="section-label">Room</div>
+    <div class="section-label-row">
+      <div class="section-label" style="margin-bottom:0">Room</div>
+      <button class="btn-gray" id="resetBtn" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">Reset</button>
+    </div>
     <input type="text" id="hotelName" placeholder="" />
-    <div class="btn-row">
+    <div class="btn-row" style="margin-bottom: 8px;">
       <button class="btn-primary" id="startBtn"></button>
       <button class="btn-dark" id="teraBtn"></button>
     </div>
+    <div class="btn-row">
+      <button class="btn-warning" id="pauseToggleBtn" style="display:none;">Pause</button>
+      <button class="btn-dark" id="selectFillBtn" style="display:none;">Selectfill</button>
+    </div>
     <div id="status" class="status"></div>
     <div id="teraStatus" class="status"></div>
+
+    <!-- Room Checkbox List -->
+    <div id="roomList">
+      <div class="room-item" id="checkAllRow">
+        <label class="room-check-all">
+          <input type="checkbox" id="checkAll"> All
+        </label>
+      </div>
+    </div>
   </div>
 
   <div class="divider"></div>

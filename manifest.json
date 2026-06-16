@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Trip.com Room Scraper",
-  "version": "5.0",
-  "description": "Automatically scrape hotel room data from Trip.com and send to Google Sheets",
+  "name": "Tera Assistant",
+  "version": "5.1",
+  "description": "Tera Assistant",
   "permissions": [
     "tabs",
     "scripting",
