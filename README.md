@@ -17,24 +17,24 @@ A Chrome Extension that extracts hotel and room data from Trip.com and automatic
 ### Hotel Info
 1. Go to any Trip.com hotel detail page
 2. Open the extension (Side Panel)
-3. Click **Extract** — automatically extracts hotel data and fills Tera Details, Overview, and Address tabs
-4. Click **Sheet** — sends hotel data to Google Sheets
+3. Click **Extract** - automatically extracts hotel data and fills Tera Details, Overview, and Address tabs
+4. Click **Sheet** - sends hotel data to Google Sheets
 
 ### Room
 1. Enter the **Hotel Name** (used for the photo ZIP folder name)
-2. Click **Scan** — scrapes all room data and downloads photos as ZIP
+2. Click **Scan** - scrapes all room data and downloads photos as ZIP
 3. Open the Tera room registration page
-4. Click **Autofill** — automatically fills in all room fields one by one
+4. Click **Autofill** - automatically fills in all room fields one by one
 5. After each room, upload photos manually then click **완료 / Continue**
 
 ---
 
 ## File Structure
-- `manifest.json` — Extension configuration
-- `popup.html` / `popup.js` — Extension popup UI and logic
-- `content.js` — Scrapes room and hotel photo data from Trip.com
-- `background.js` — Opens Side Panel on extension icon click
-- `jszip.min.js` — Library for creating ZIP files
+- `manifest.json` - Extension configuration
+- `popup.html` / `popup.js` - Extension popup UI and logic
+- `content.js` - Scrapes room and hotel photo data from Trip.com
+- `background.js` - Opens Side Panel on extension icon click
+- `jszip.min.js` - Library for creating ZIP files
 
 ---
 
