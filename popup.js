@@ -129,15 +129,14 @@ const HOTEL_FACILITY_MAP = [
   { codes: [6, 164], teraValues: ["CONFERENCE_ROOM", "MEETING_FACILITIES"] },
   { codes: [137], teraValues: ["WEDDING_SERVICE"] },
   { codes: [168], teraValues: ["SECRETARIAL_SERVICE"] },
-  { codes: [577], teraValues: ["BUSINESS_CENTER"] },
+  { codes: [8, 577, 170, 174, 175], teraValues: ["BUSINESS_CENTER"] },
   { codes: [129], teraValues: ["PHOTOCOPIER"] },
   { codes: [176], teraValues: ["PROJECTOR"] },
-  { codes: [174, 175], teraValues: ["BUSINESS_CENTER"] },
   { codes: [127], teraValues: ["CONCIERGE"] },
   { codes: [95],  teraValues: ["SAFETY_DEPOSIT_BOX"] },
   { codes: [96],  teraValues: ["PORTER", "BELLBOY_SERVICE"] },
   { codes: [97],  teraValues: ["LUGGAGE_STORAGE"] },
-  { codes: [98],  teraValues: ["FRONT_DESK"] },
+  { codes: [69, 98, 354, 358, 364], teraValues: ["FRONT_DESK"] },
   { codes: [11],  teraValues: ["CURRENCY_EXCHANGE"] },
   { codes: [143, 131], teraValues: ["EXPRESS_CHECK_IN", "EXPRESS_CHECK_OUT"] },
   { codes: [12],  teraValues: ["TOURS"] },
@@ -150,7 +149,7 @@ const HOTEL_FACILITY_MAP = [
   { codes: [173], teraValues: ["NON_SMOKING_ROOM"] },
   { codes: [157], teraValues: ["LIBRARY"] },
   { codes: [384, 385], teraValues: ["GARDEN"] },
-  { codes: [42],  teraValues: ["FITNESS_CENTER", "FITNESS"] },
+  { codes: [42, 439], teraValues: ["FITNESS_CENTER", "FITNESS"] },
   { codes: [65, 633], teraValues: ["SPA"] },
   { codes: [43, 425], teraValues: ["MASSAGE"] },
   { codes: [44],  teraValues: ["SAUNA"] },
@@ -163,19 +162,23 @@ const HOTEL_FACILITY_MAP = [
   { codes: [30],  teraValues: ["BOWLING_ALLEY"] },
   { codes: [22],  teraValues: ["KARAOKE"] },
   { codes: [151], teraValues: ["CASINO"] },
-  { codes: [15, 178, 128, 130], teraValues: ["LAUNDRY_SERVICE"] },
+  { codes: [15, 128, 130, 178, 355, 356], teraValues: ["LAUNDRY_SERVICE"] },
   { codes: [362], teraValues: ["LAUNDERETTE"] },
   { codes: [343], teraValues: ["CLOTHES_DRYER"] },
+  { codes: [122], teraValues: ["BABYSITTING", "SUPERVISED_CHILDCARE"] },
   { codes: [68],  teraValues: ["CHILDREN_PLAY_AREA"] },
   { codes: [365], teraValues: ["BABYSITTING"] },
   { codes: [330, 331, 332, 333], teraValues: ["BABYSITTING"] },
   { codes: [334, 368], teraValues: ["CHILDREN_CLUB"] },
+  { codes: [360], teraValues: ["LUGGAGE_STORAGE"] },
   { codes: [575], teraValues: ["WHEELCHAIR_ACCESSIBLE"] },
   { codes: [19],  teraValues: ["IN_ROOM_ACCESSIBILITY", "ACCESSIBLE_BATHROOM"] },
-  { codes: [567, 568], teraValues: ["ACCESSIBILITY_EQUIPMENT"] },
+  { codes: [565, 567, 568, 574], teraValues: ["ACCESSIBILITY_EQUIPMENT"] },
   { codes: [570], teraValues: ["ROLL_IN_SHOWER"] },
   { codes: [573], teraValues: ["ACCESSIBLE_PATH_OF_TRAVEL"] },
-  { codes: [177, 479, 344, 347, 350, 353, 371, 372, 513, 40], teraValues: ["HAS_24_HOUR_SECURITY"] },
+  { codes: [40, 177, 344, 347, 350, 351, 353, 371, 372, 479, 513], teraValues: ["HAS_24_HOUR_SECURITY"] },
+  { codes: [739], teraValues: ["MULTILINGUAL_STAFF"] },
+  { codes: [777], teraValues: ["SPECIAL_DIETARY_OPTIONS"] },
   { keywords: ["rooftop pool", "infinity pool", "outdoor pool", "outdoor swimming", "saltwater pool", "pool with view"], teraValues: ["OUTDOOR_POOL", "POOL"] },
   { keywords: ["indoor pool", "indoor swimming"], teraValues: ["INDOOR_POOL", "POOL"] },
   { keywords: ["heated pool"], teraValues: ["OUTDOOR_HEATED_POOL", "POOL"] },
@@ -198,7 +201,6 @@ const HOTEL_FACILITY_MAP = [
   { keywords: ["marina"], teraValues: ["MARINA"] },
   { keywords: ["turkish bath", "hammam"], teraValues: ["TURKISH_BATH"] },
 ];
-
 function getTeraFacilities(tripFacilities) {
   const result = new Set();
   for (const item of tripFacilities) {
@@ -235,7 +237,7 @@ function setLang(lang) {
   const banner = document.getElementById('updateBanner');
   if (banner.dataset.version) banner.textContent = STRINGS[lang].update(banner.dataset.version);
   const pauseLabel = document.getElementById('pauseLabel');
-  if (pauseLabel) pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'After Photo Upload';
+  if (pauseLabel) pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'Photo Upload';
 }
 
 function setStatus(msg, type = "") {
@@ -1063,11 +1065,15 @@ document.getElementById("teraBtn").addEventListener("click", async () => {
       });
       await sleep(3000);
       while (true) {
-        const check = await exec(tab.id, () => !!document.querySelector('[data-id="IcSystemStatusFail16"]'));
-        if (!check?.[0]?.result) break;
+        const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
+        if (!urlCheck?.[0]?.result) break;
         await waitForContinue(room.roomName, true);
         await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
         await sleep(1500);
+        await exec(tab.id, () => {
+          Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click();
+        });
+        await sleep(3000);
       }
       await sleep(800);
     }
@@ -1367,11 +1373,13 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
       await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
       await sleep(3000);
       while (true) {
-        const check = await exec(tab.id, () => !!document.querySelector('[data-id="IcSystemStatusFail16"]'));
-        if (!check?.[0]?.result) break;
+        const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
+        if (!urlCheck?.[0]?.result) break;
         await waitForContinue(room.roomName, true);
         await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
         await sleep(1500);
+        await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
+        await sleep(3000);
       }
       await sleep(800);
     }
