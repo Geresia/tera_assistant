@@ -85,7 +85,7 @@ chrome.storage.session.get('roomData', (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.1";
+const CURRENT_VERSION = "5.11";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 
 const ROOM_TYPE_OPTIONS = [
