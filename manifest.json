@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tera Assistant",
-  "version": "5.1",
+  "version": "5.11",
   "description": "Tera Assistant",
   "permissions": [
     "tabs",
