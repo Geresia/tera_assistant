@@ -144,7 +144,7 @@
     .status.error { color: #d93025; }
 
     /* Room List Checkboxes */
-    #roomList {
+    #roomList, #editRoomList {
       display: none;
       margin-top: 10px;
       border: 0.5px solid #e5e5ea;
@@ -171,6 +171,12 @@
       border-radius: 4px;
       accent-color: #0071e3;
       cursor: pointer;
+      flex-shrink: 0;
+    }
+    .room-item .room-meta {
+      font-size: 11px;
+      color: #aeaeb2;
+      margin-left: auto;
       flex-shrink: 0;
     }
     .room-check-all {
@@ -236,6 +242,7 @@
     </div>
   </div>
 
+  <!-- ===== Hotel Info ===== -->
   <div class="section">
     <div class="section-label">Hotel Info</div>
     <div class="btn-row">
@@ -247,9 +254,10 @@
 
   <div class="divider"></div>
 
+  <!-- ===== Create New Room ===== -->
   <div class="section">
     <div class="section-label-row">
-      <div class="section-label" style="margin-bottom:0">Room</div>
+      <div class="section-label" style="margin-bottom:0">Create New Room</div>
       <button class="btn-gray" id="resetBtn" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">Reset</button>
     </div>
     <input type="text" id="hotelName" placeholder="" />
@@ -269,6 +277,30 @@
       <div class="room-item" id="checkAllRow">
         <label class="room-check-all">
           <input type="checkbox" id="checkAll"> All
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ===== Edit Room ===== -->
+  <div class="section">
+    <div class="section-label-row">
+      <div class="section-label" style="margin-bottom:0">Edit Room</div>
+      <button class="btn-gray" id="editResetBtn" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">Reset</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="bedScanBtn">Bed Scan</button>
+      <button class="btn-dark" id="roomUpdateBtn">Room Update</button>
+    </div>
+    <div id="editStatus" class="status"></div>
+
+    <!-- Edit Room Checkbox List (selectfill 매칭용) -->
+    <div id="editRoomList">
+      <div class="room-item" id="editCheckAllRow">
+        <label class="room-check-all">
+          <input type="checkbox" id="editCheckAll"> All
         </label>
       </div>
     </div>

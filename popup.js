@@ -1391,3 +1391,255 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
   document.getElementById("pauseToggleBtn").style.display = "none";
   isPaused = false;
 });
+
+// ====== Edit Room (침대만) ======
+let editRoomData = [];
+
+function setEditStatus(msg, type = "") {
+  const el = document.getElementById("editStatus");
+  el.textContent = msg;
+  el.className = "status" + (type ? " " + type : "");
+}
+
+// 침대만 채우는 공통 함수 (편집 시 기존 값 덮어쓰기)
+async function fillBeds(tabId, room) {
+  await exec(tabId, () => document.querySelector('[data-testid="button-rs-room-open-bed-settings"]')?.click());
+  await sleep(1000);
+
+  const hasOr = (room.bedText || '').toLowerCase().includes(' or ');
+  await exec(tabId, () => document.querySelector('[data-testid="radio-option-single-bedroom"]')?.click());
+  await sleep(500);
+
+  if (hasOr) {
+    await exec(tabId, () => {
+      for (const span of document.querySelectorAll('span.css-1rlnnbz')) {
+        if (span.textContent.trim() === 'Multiple Bed Arrangement') {
+          span.closest('label').querySelector('input[type="radio"]')?.click();
+          return;
+        }
+      }
+    });
+    await sleep(800);
+    const allBeds = room.bedText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
+    await exec(tabId, async (beds) => {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < beds.length; i++) {
+        document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}"]`)?.click();
+        await delay(400);
+        const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}-queryinput"]`);
+        if (input) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, beds[i].type);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await delay(400);
+          Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-0-${i}-options"] span`))
+            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+          await delay(300);
+        }
+        const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-0-${i}"]`);
+        if (countInput) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(countInput, beds[i].count);
+          countInput.dispatchEvent(new Event('input', { bubbles: true }));
+          countInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }, [allBeds]);
+  } else {
+    const beds = parseBeds(room.bedText);
+    await exec(tabId, async (beds) => {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+
+      // 1) 기존 추가 침대 row 삭제 (row 1번부터, 뒤에서부터)
+      for (let i = 10; i >= 1; i--) {
+        const removeBtn =
+          document.querySelector(`[data-testid="button-remove-bedtype-0-${i}"]`) ||
+          document.querySelector(`[data-testid="button-delete-bedtype-0-${i}"]`);
+        if (removeBtn) { removeBtn.click(); await delay(300); }
+      }
+
+      // 2) 필요한 만큼 row 추가 (기존 row 0은 그대로 두고 덮어씀)
+      const existing = document.querySelectorAll('[data-testid^="select-bedtype-fixed-0-"]').length;
+      for (let i = existing; i < beds.length; i++) {
+        document.querySelector('[data-testid="button-add-another-bedtype-0"]')?.click();
+        await delay(400);
+      }
+
+      // 3) 각 row 덮어쓰기
+      for (let i = 0; i < beds.length; i++) {
+        document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}"]`)?.click();
+        await delay(400);
+        const input = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}-queryinput"]`);
+        if (input) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, beds[i].type);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await delay(400);
+          Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-0-${i}-options"] span`))
+            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+          await delay(300);
+        }
+        const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-0-${i}"]`);
+        if (countInput) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(countInput, beds[i].count);
+          countInput.dispatchEvent(new Event('input', { bubbles: true }));
+          countInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }, [beds]);
+  }
+
+  // 침대 모달 저장 (Save Bed)
+  await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
+  await sleep(1000);
+}
+// 현재 열린 폼의 custom name 읽기
+async function getCurrentRoomName(tabId) {
+  const r = await exec(tabId, () => {
+    return document.querySelector('[data-testid="input-rs-room-custom-name"]')?.value || "";
+  });
+  return r?.[0]?.result || "";
+}
+
+// Bed Scan: Trip에서 방 스캔 후 roomName + bedText만 추출
+document.getElementById("bedScanBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("bedScanBtn");
+  btn.disabled = true;
+  editRoomData = [];
+  setEditStatus(currentLang === 'kr' ? "침대 스캔 중..." : "Scanning beds...");
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab.url?.includes("trip.com/hotels")) {
+      setEditStatus(t().notTripPage, "error"); btn.disabled = false; return;
+    }
+    const result = await scanTab(tab.id);
+    const map = new Map();
+    (result.rooms || []).forEach(r => { if (!map.has(r.roomName)) map.set(r.roomName, r); });
+    const rooms = [...map.values()].map(r => ({ roomName: r.roomName, bedText: r.bedText || "" }));
+    if (rooms.length === 0) { setEditStatus(t().noRooms, "error"); btn.disabled = false; return; }
+
+    editRoomData = rooms;
+
+    const list = document.getElementById("editRoomList");
+    list.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="editCheckAll" checked> All</label></div>`;
+    rooms.forEach((room, i) => {
+      const item = document.createElement("div");
+      item.className = "room-item";
+      item.innerHTML = `<input type="checkbox" class="edit-room-cb" data-index="${i}" checked><span>${room.roomName}</span><span class="room-meta">${room.bedText || '-'}</span>`;
+      item.querySelector('span').onclick = () => item.querySelector('input').click();
+      list.appendChild(item);
+    });
+    document.getElementById("editCheckAll").addEventListener("change", (e) => {
+      document.querySelectorAll(".edit-room-cb").forEach(cb => cb.checked = e.target.checked);
+    });
+    list.style.display = "block";
+    setEditStatus(currentLang === 'kr' ? `완료: ${rooms.length}개 객실 침대 정보` : `Done: ${rooms.length} rooms`, "success");
+  } catch (e) {
+    setEditStatus("Error: " + e.message, "error");
+  }
+  btn.disabled = false;
+});
+
+// Room Update: 방 목록에서 자동으로 방 열고 → 침대 고치고 → 저장 → 다음 방
+document.getElementById("roomUpdateBtn").addEventListener("click", async () => {
+  const selected = Array.from(document.querySelectorAll(".edit-room-cb:checked")).map(cb => editRoomData[parseInt(cb.dataset.index)]);
+  if (selected.length === 0) { setEditStatus(currentLang === 'kr' ? "선택된 방이 없어요." : "No rooms selected.", "error"); return; }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab.url?.includes("tera.traveloka.com") || !tab.url?.includes("/room-data")) {
+    setEditStatus(currentLang === 'kr' ? "Tera 방 목록(Room Data) 화면에서 실행하세요." : "Open the Room Data list page first.", "error");
+    return;
+  }
+
+  const btn = document.getElementById("roomUpdateBtn");
+  btn.disabled = true;
+  document.getElementById("pauseToggleBtn").style.display = "block";
+  isPaused = false;
+
+  try {
+    // 0) 목록 화면이면 목록으로, 폼이면 한 번 뒤로 보내기 위해 목록 URL 확보
+    const listUrl = "https://tera.traveloka.com/room/room-data/";
+
+    // 1) 목록에서 모든 방 id 수집
+    const goList = async () => {
+      const cur = await exec(tab.id, () => location.href, [], "MAIN");
+      if (!cur?.[0]?.result.includes("/room-data/form/")) return; // 이미 목록
+    };
+    await goList();
+
+    let idsRes = await exec(tab.id, () => {
+      return [...document.querySelectorAll('[data-testid^="button-edit-"]')]
+        .map(b => b.getAttribute('data-testid').replace('button-edit-', ''));
+    });
+    let ids = idsRes?.[0]?.result || [];
+    if (ids.length === 0) { setEditStatus(currentLang === 'kr' ? "방 목록을 못 읽었어요. Room Data 화면인지 확인하세요." : "No rooms found in list.", "error"); btn.disabled = false; document.getElementById("pauseToggleBtn").style.display = "none"; return; }
+
+    let updated = 0;
+    const matchedNames = new Set();
+
+    // 2) id 하나씩 열어서 매칭
+    for (let k = 0; k < ids.length; k++) {
+      if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
+      const id = ids[k];
+
+      setEditStatus((currentLang === 'kr' ? `방 확인 중... (${k + 1}/${ids.length})` : `Checking... (${k + 1}/${ids.length})`));
+
+      // 폼 열기 (URL 이동)
+      await exec(tab.id, (url) => { location.href = url; }, [`https://tera.traveloka.com/room/room-data/form/?id=${id}`], "MAIN");
+      await sleep(3500); // 폼 로딩 대기
+
+      const currentName = await getCurrentRoomName(tab.id);
+      if (!currentName) { continue; }
+
+      // scan 목록과 매칭 (이미 처리한 이름은 건너뜀)
+      const room = selected.find(r => !matchedNames.has(r.roomName) && r.roomName.trim() === currentName.trim())
+                || selected.find(r => !matchedNames.has(r.roomName) && (currentName.includes(r.roomName.trim()) || r.roomName.includes(currentName.trim())));
+      if (!room) continue; // 선택 안 된 방이거나 매칭 안 됨 → 다음 방
+
+      matchedNames.add(room.roomName);
+      setEditStatus((currentLang === 'kr' ? `침대 업데이트 중... ` : `Updating beds... `) + room.roomName);
+
+      // 침대만 채우기
+      await fillBeds(tab.id, room);
+
+      // 저장
+      await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
+      await sleep(1500);
+      await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
+      await sleep(3000);
+      while (true) {
+        const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
+        if (!urlCheck?.[0]?.result) break;
+        await waitForContinue(room.roomName, true);
+        await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
+        await sleep(1500);
+        await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
+        await sleep(3000);
+      }
+      updated++;
+
+      // 저장 후 목록으로 복귀 (다음 방 열기 위해)
+      await exec(tab.id, (url) => { location.href = url; }, [listUrl], "MAIN");
+      await sleep(2500);
+
+      // 선택한 방 다 처리했으면 종료
+      if (matchedNames.size >= selected.length) break;
+    }
+
+    setEditStatus((currentLang === 'kr' ? `완료! ${updated}개 방 침대 업데이트` : `Done! ${updated} rooms updated`), "success");
+  } catch (e) {
+    setEditStatus(t().teraError(e.message), "error");
+  }
+  btn.disabled = false;
+  document.getElementById("pauseToggleBtn").style.display = "none";
+  isPaused = false;
+});
+
+// Edit Reset
+document.getElementById("editResetBtn").addEventListener("click", () => {
+  editRoomData = [];
+  const list = document.getElementById("editRoomList");
+  list.style.display = "none";
+  list.innerHTML = `<div class="room-item" id="editCheckAllRow"><label class="room-check-all"><input type="checkbox" id="editCheckAll"> All</label></div>`;
+  setEditStatus("");
+});
