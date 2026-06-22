@@ -28,6 +28,7 @@ const STRINGS = {
     hotelAutofillAddress: "Address 입력 중...",
     hotelAutofillDone: "완료!",
     hotelAutofillReload: "페이지 리로드됨 - 다시 시도해주세요.",
+    update: (v) => `v${v} 업데이트 해주세요`,
   },
   en: {
     startBtn: "Room Scan",
@@ -57,6 +58,7 @@ const STRINGS = {
     hotelAutofillAddress: "Filling Address...",
     hotelAutofillDone: "Done!",
     hotelAutofillReload: "Page reloaded — please try again.",
+    update: (v) => `v${v} update available`,
   }
 };
 
@@ -76,7 +78,7 @@ chrome.storage.session.get('roomData', (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.2";
+const CURRENT_VERSION = "5.";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
