@@ -119,6 +119,60 @@ function getOffsetDates(offset) {
   return { checkIn: fmt(base), checkOut: fmt(next) };
 }
 
+// ── 국가 판단 (호텔 주소 기반) ──
+function detectCountry() {
+  try {
+    const addr = window.__NEXT_DATA__?.props?.pageProps?.hotelDetailResponse?.hotelPositionInfo?.address || "";
+    const text = (addr + " " + (document.body?.innerText || "")).toLowerCase();
+    const checks = [
+      ["south korea", "KR"], ["korea", "KR"],
+      ["japan", "JP"],
+      ["hong kong", "HK"], ["macau", "HK"], ["macao", "HK"],
+      ["malaysia", "MY"],
+      ["philippines", "PH"],
+      ["australia", "AU"],
+    ];
+    for (const [key, code] of checks) {
+      if (text.includes(key)) return code;
+    }
+    return "";
+  } catch (e) { console.log("[scan] country detect error:", e.message); return ""; }
+}
+
+// ── Extra Bed/Crib Description (React fiber 탐색) ──
+function getRoomPopInfo() {
+  try {
+    const root = document.querySelector('#root, #app') || document.body;
+    const fk = Object.keys(root).find(k =>
+      k.startsWith('__reactFiber') || k.startsWith('__reactContainer'));
+    if (!fk) return null;
+
+    const seen = new WeakSet();
+    let found = null;
+    (function walk(f, d) {
+      if (!f || d > 300 || found) return;
+      if (seen.has(f)) return;
+      seen.add(f);
+      const p = f.memoizedProps;
+      if (p && p.hotelRoomPopInfoResponse && p.hotelRoomPopInfoResponse.roomPopInfo) {
+        found = p.hotelRoomPopInfoResponse;
+        return;
+      }
+      walk(f.child, d + 1);
+      walk(f.sibling, d + 1);
+    })(root[fk], 0);
+
+    return found?.roomPopInfo || null;
+  } catch (e) { console.log("[scan] roomPopInfo fiber walk error:", e.message); return null; }
+}
+
+function getAddBedTitle(roomPopInfo, key) {
+  const info = roomPopInfo?.[key];
+  const cpt = info?.policyInfo?.childPolicyTableInfo || [];
+  const blk = cpt.find(x => /addBed/i.test(x.type));
+  return blk ? blk.title : "";
+}
+
 // ── SEO Room Data Parser ──
 function extractSeoRoomData() {
   const targetScript = Array.from(document.querySelectorAll('script')).find(s => s.textContent.includes('physicRoomMap'));
@@ -146,32 +200,87 @@ function extractSeoRoomData() {
   catch (e) { console.log("[scan] seoHotelRooms parse error:", e.message); return null; }
 }
 
-function parsePhysicRoomMap(physicRoomMap, saleRoomMap) {
+function parsePhysicRoomMap(physicRoomMap, saleRoomMap, roomPopInfo) {
   const occupancyMap = {};
+  const saleKeyMap = {}; // physicalRoomId(string) -> saleRoom 키 목록
+
   if (saleRoomMap) {
-    for (const sale of Object.values(saleRoomMap)) {
+    for (const [saleKey, sale] of Object.entries(saleRoomMap)) {
       const pid = String(sale.physicalRoomId);
       const count = sale.guestCountInfo?.guestCount;
       if (pid && count && count > (occupancyMap[pid] || 0)) occupancyMap[pid] = count;
+      if (pid) {
+        if (!saleKeyMap[pid]) saleKeyMap[pid] = [];
+        saleKeyMap[pid].push(saleKey);
+      }
     }
   }
 
-  return Object.entries(physicRoomMap).reduce((rooms, [, room]) => {
+  // 이름에서 "High FL", "High Floor" 등의 층수 접미사를 제거한 기본 이름 추출
+  const stripFloorSuffix = (name) => (name || "").replace(/\s*(high\s*fl(oor)?|low\s*fl(oor)?)\s*$/i, '').trim();
+
+  const entries = Object.entries(physicRoomMap);
+
+  // 1차 패스: physicalRoomId / saleRoom 키로 직접 desc 추출
+  const directDesc = {}; // physicalRoomId(string) -> desc
+  for (const [, room] of entries) {
+    if (!room.name) continue;
+    const physicalRoomId = String(room.id);
+    let extraBedDesc = "";
+    if (roomPopInfo) {
+      extraBedDesc = getAddBedTitle(roomPopInfo, physicalRoomId);
+      if (!extraBedDesc) {
+        for (const saleKey of (saleKeyMap[physicalRoomId] || [])) {
+          extraBedDesc = getAddBedTitle(roomPopInfo, saleKey);
+          if (extraBedDesc) break;
+        }
+      }
+    }
+    directDesc[physicalRoomId] = extraBedDesc;
+  }
+
+  // 2차 패스: 매칭 실패한 방에 대해 "기본 이름 + 침대 구성"이 같은 다른 방의 desc로 fallback
+  const getDescWithFallback = (room) => {
+    const physicalRoomId = String(room.id);
+    if (directDesc[physicalRoomId]) return directDesc[physicalRoomId];
+
+    const baseName = stripFloorSuffix(room.name).toLowerCase();
+    const bedTitle = (room.bedInfo?.title || "").toLowerCase();
+
+    for (const [, other] of entries) {
+      const otherPid = String(other.id);
+      if (otherPid === physicalRoomId) continue;
+      if (!directDesc[otherPid]) continue;
+      const otherBaseName = stripFloorSuffix(other.name).toLowerCase();
+      const otherBedTitle = (other.bedInfo?.title || "").toLowerCase();
+      if (otherBaseName === baseName && otherBedTitle === bedTitle) {
+        return directDesc[otherPid];
+      }
+    }
+    return "";
+  };
+
+  return entries.reduce((rooms, [, room]) => {
     if (!room.name) return rooms;
 
     const cat1 = (room.pictureInfo || []).filter(p => p.categoryId === 1);
     const photos = (cat1.length ? cat1 : room.pictureInfo || []).map(p => p.url).filter(Boolean);
+
+    const physicalRoomId = String(room.id);
+    const extraBedDesc = getDescWithFallback(room);
 
     rooms.push({
       roomName: room.name,
       bedText: room.bedInfo?.title || "",
       sizeText: room.areaInfo?.title || (room.area ? room.area + "㎡" : ""),
       facilityStr: extractFacilities((room.baseFacilityInfo || []).map(f => f.name).filter(Boolean)),
-      occupancy: occupancyMap[String(room.id)] || room.person || 2,
+      occupancy: occupancyMap[physicalRoomId] || room.person || 2,
       roomView: getRoomView(room.name),
       smoking: room.smokeInfo?.title ? (room.smokeInfo.title.toLowerCase().includes("non") ? "NO" : room.smokeInfo.title.toLowerCase().includes("smoking") ? "YES" : "") : "",
       windowType: room.windowInfo?.type ?? 0,
       roomPhotos: photos,
+      physicalRoomId: physicalRoomId,
+      extraBedDesc: extraBedDesc,
     });
     return rooms;
   }, []);
@@ -243,11 +352,13 @@ async function scrapeHotelPhotos() {
 // ── Main ──
 window.__scanRooms = async function() {
   let rooms = [];
+  const roomPopInfo = getRoomPopInfo();
+  const country = detectCountry();
 
   const seoData = extractSeoRoomData();
   if (seoData?.physicRoomMap && Object.keys(seoData.physicRoomMap).length > 0) {
     console.log("[scan] Using seoHotelRooms, rooms:", Object.keys(seoData.physicRoomMap).length);
-    rooms = parsePhysicRoomMap(seoData.physicRoomMap, null);
+    rooms = parsePhysicRoomMap(seoData.physicRoomMap, null, roomPopInfo);
   } else {
     console.log("[scan] Falling back to API calls");
     const offsets = [0, 5, 10, 15, 20, 25, 30, 40, 45, 50, 55, 60];
@@ -263,8 +374,10 @@ window.__scanRooms = async function() {
         Object.assign(mergedSale, d.data.saleRoomMap || {});
       }
     }
-    if (Object.keys(mergedPhysic).length > 0) rooms = parsePhysicRoomMap(mergedPhysic, mergedSale);
+    if (Object.keys(mergedPhysic).length > 0) rooms = parsePhysicRoomMap(mergedPhysic, mergedSale, roomPopInfo);
   }
+
+  rooms = rooms.map(r => ({ ...r, country }));
 
   const hotelPhotos = await scrapeHotelPhotos();
   window.__scanResult = { rooms, hotelPhotos };

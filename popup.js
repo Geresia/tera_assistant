@@ -6,20 +6,15 @@ const STRINGS = {
     defaultStatus: "Trip.com 호텔 페이지에서 실행하세요.",
     notTripPage: "Trip.com 호텔 페이지에서 실행하세요.",
     scan1: "스캔 중...",
-    scan1done: (n, p) => `완료: ${n}개 객실 | 호텔사진: ${p}장`,
+    scan1done: (n) => `완료: ${n}개 객실`,
     noRooms: "객실을 찾지 못했습니다.",
-    zipping: "사진 ZIP 생성 중...",
-    done: (r, p) => `완료! 객실 ${r}개 + 사진 ${p}장`,
-    noPhotos: (n) => `완료! 총 ${n}개 객실 (사진 없음)`,
-    noJszip: (n) => `완료! 총 ${n}개 객실 (JSZip 없음)`,
-    update: (v) => `v${v} 업데이트 해주세요`,
     teraBtn: "Autofill",
     teraNoRooms: "먼저 스캔을 실행하세요.",
     teraNotTera: "tera.traveloka.com 페이지에서 실행하세요.",
     teraRunning: (c, t) => `입력 중... (${c}/${t})`,
     teraDone: (n) => `완료! ${n}개 객실 등록`,
     teraError: (e) => `오류: ${e}`,
-    extractBtn: "Hotel Scan for Tera",
+    extractBtn: "Hotel Bulk Insert",
     extracting: "스캔 중...",
     extractDone: (n) => `완료: ${n}`,
     extractFail: "스캔 실패",
@@ -40,20 +35,15 @@ const STRINGS = {
     defaultStatus: "Run this on a Trip.com hotel page.",
     notTripPage: "Please run this on a Trip.com hotel page.",
     scan1: "Scanning...",
-    scan1done: (n, p) => `Done: ${n} rooms | Photos: ${p}`,
+    scan1done: (n) => `Done: ${n} rooms`,
     noRooms: "No rooms found.",
-    zipping: "Creating ZIP...",
-    done: (r, p) => `Done! ${r} rooms + ${p} photos`,
-    noPhotos: (n) => `Done! ${n} rooms (no photos)`,
-    noJszip: (n) => `Done! ${n} rooms (JSZip missing)`,
-    update: (v) => `v${v} update available`,
     teraBtn: "Autofill",
     teraNoRooms: "Please scan first.",
     teraNotTera: "Please open tera.traveloka.com first.",
     teraRunning: (c, t) => `Filling... (${c}/${t})`,
     teraDone: (n) => `Done! ${n} rooms registered`,
     teraError: (e) => `Error: ${e}`,
-    extractBtn: "Hotel Scan for Tera",
+    extractBtn: "Hotel Bulk Insert",
     extracting: "Extracting...",
     extractDone: (n) => `Done: ${n}`,
     extractFail: "Extraction failed.",
@@ -76,6 +66,7 @@ let roomData = [];
 let currentHotelData = null;
 let isPaused = false;
 let pauseResolve = null;
+let selectedPerson = localStorage.getItem('teraPerson') || '';
 
 chrome.storage.session.get('roomData', (data) => {
   if (data.roomData?.length > 0) {
@@ -85,8 +76,31 @@ chrome.storage.session.get('roomData', (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.11";
+const CURRENT_VERSION = "5.2";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
+const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
+const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
+
+async function openOrFocusTab(urlPattern, fallbackUrl) {
+  const tabs = await chrome.tabs.query({ url: urlPattern });
+  if (tabs.length > 0) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    if (tabs[0].windowId) await chrome.windows.update(tabs[0].windowId, { focused: true });
+    return tabs[0];
+  } else {
+    return await chrome.tabs.create({ url: fallbackUrl });
+  }
+}
+
+async function openOrFocusSheet() {
+  const tabs = await chrome.tabs.query({ url: "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/*" });
+  if (tabs.length > 0) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    if (tabs[0].windowId) await chrome.windows.update(tabs[0].windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url: HOTEL_SHEET_URL });
+  }
+}
 
 const ROOM_TYPE_OPTIONS = [
   "Junior Suite", "Studio Room", "Deluxe", "Double", "Executive",
@@ -99,14 +113,37 @@ const BED_TYPE_MAP = {
   sofa: 'Sofa', futon: 'Mattress',
 };
 
+// ── 사진 카테고리 자동 분류 (MobileNet) ──
+const BEDROOM_KEYWORDS = ['four-poster', 'studio couch', 'cradle', 'crib', 'bunk bed', 'bed'];
+const BATHROOM_KEYWORDS = ['toilet seat', 'tub', 'bathtub', 'shower curtain', 'washbasin', 'sink', 'toilet'];
+
+function mapLabelToCategory(label) {
+  const lower = (label || '').toLowerCase();
+  if (BATHROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bathroom';
+  if (BEDROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bedroom';
+  return 'Others';
+}
+
+// ── 국가별 디폴트값 (Trip.com 스캔 데이터 없을 때만 사용) ──
+const COUNTRY_DEFAULTS = {
+  KR: { size: '10', rateProtection: '10000' },
+  JP: { size: '12', rateProtection: '5000' },
+  HK: { size: '10', rateProtection: '250' },
+  MY: { size: '10', rateProtection: '100' },
+  PH: { size: '10', rateProtection: '250' },
+};
+const DEFAULT_FACILITIES = "AIR_CONDITIONING, HAIR_DRYER, COFFEE_TEA_MAKER, COMPLIMENTARY_BOTTLED_WATER, SHOWER";
+
+function getCountryDefaults(country) {
+  return COUNTRY_DEFAULTS[country] || COUNTRY_DEFAULTS.KR;
+}
+
 const COUNTRY_LOCALE_MAP = {
   "south korea": "ko-KR", korea: "ko-KR",
   japan: "ja-JP", china: "zh-CN", "hong kong": "zh-HK",
   indonesia: "id-ID", vietnam: "vi-VN", thailand: "th-TH",
   philippines: "en-PH", malaysia: "ms-MY", singapore: "en-SG",
 };
-
-const TARGET_W = 1280, TARGET_H = 720, NEAR_THRESHOLD = 0.3, MAX_W = 4096, MAX_H = 4096;
 
 // ── Hotel Facility Map ──
 const HOTEL_FACILITY_MAP = [
@@ -231,7 +268,6 @@ function setLang(lang) {
   document.getElementById('startBtn').textContent = STRINGS[lang].startBtn;
   document.getElementById('hotelName').placeholder = STRINGS[lang].hotelNamePlaceholder;
   document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
-  document.getElementById('teraBtn').textContent = STRINGS[lang].teraBtn;
   document.getElementById('extractBtn').textContent = STRINGS[lang].extractBtn;
   document.getElementById('sheetBtn').textContent = STRINGS[lang].hotelInsertBtn;
   const banner = document.getElementById('updateBanner');
@@ -297,67 +333,6 @@ async function checkForUpdates() {
   } catch (e) { console.log("Version check failed:", e.message); }
 }
 
-// ── Image Processing ──
-function isLowQualityUrl(url) {
-  const m = url.match(/_R_(\d+)_(\d+)_/);
-  if (m) {
-    const w = Number(m[1]), h = Number(m[2]);
-    if (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD) return true;
-    const r = w / h;
-    if (r < 0.5 || r > 2.0) return true;
-  }
-  const wm = url.match(/_W_(\d+)_(\d+)_/);
-  if (wm) {
-    const w = Number(wm[1]), h = Number(wm[2]);
-    if (h > 0 && (w < TARGET_W * NEAR_THRESHOLD || h < TARGET_H * NEAR_THRESHOLD)) return true;
-  }
-  return false;
-}
-
-async function resizeBlob(blob, newW, newH) {
-  return new Promise(resolve => {
-    const objUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = newW; canvas.height = newH;
-      const ctx = canvas.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, newW, newH);
-      URL.revokeObjectURL(objUrl);
-      canvas.toBlob(resolve, 'image/jpeg', 0.92);
-    };
-    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(blob); };
-    img.src = objUrl;
-  });
-}
-
-async function checkAndUpscale(blob) {
-  return new Promise(resolve => {
-    const objUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = async () => {
-      const w = img.naturalWidth, h = img.naturalHeight, ratio = w / h;
-      URL.revokeObjectURL(objUrl);
-      if (ratio < 0.5 || ratio > 2.0) { resolve({ blob, isLow: true }); return; }
-      if (w > MAX_W || h > MAX_H) {
-        const scale = Math.min(MAX_W / w, MAX_H / h);
-        resolve({ blob: await resizeBlob(blob, Math.round(w * scale), Math.round(h * scale)), isLow: false });
-        return;
-      }
-      if (w < TARGET_W || h < TARGET_H) {
-        const scale = Math.max(TARGET_W / w, TARGET_H / h);
-        resolve({ blob: await resizeBlob(blob, Math.round(w * scale), Math.round(h * scale)), isLow: false });
-        return;
-      }
-      resolve({ blob, isLow: false });
-    };
-    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve({ blob, isLow: false }); };
-    img.src = objUrl;
-  });
-}
-
 // ── Room Scan ──
 async function scanTab(tabId) {
   await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: () => { window.__scanRoomsLoaded = false; } });
@@ -412,15 +387,42 @@ async function teraFillOneRoom(tabId, room, roomType) {
       if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) { div.click(); return; }
     }
   });
-  await sleep(2000);
+  await sleep(3500);
+
+  // Room Type 드롭다운이 실제로 뜰 때까지 polling
+  let roomTypeReady = false;
+  for (let i = 0; i < 16; i++) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid="select-rs-room-roomtype"]'));
+    if (r?.[0]?.result) { roomTypeReady = true; break; }
+    await sleep(300);
+  }
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-roomtype"]')?.click());
-  await sleep(1000);
+  await sleep(1200);
+
+  // 옵션이 실제로 뜰 때까지 polling
+  for (let i = 0; i < 16; i++) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(300);
+  }
+
   await exec(tabId, (type) => {
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span'))
       .find(s => s.textContent.trim() === type)?.closest('div').click();
   }, [roomType]);
   await sleep(1500);
+
+  // Room Description (extra bed/crib 안내문, Room Type 다음 순서)
+  await exec(tabId, (desc) => {
+    const el = document.querySelector('[data-testid="textfield-rs-room-description"]');
+    if (!el) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(el, desc);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [room.extraBedDesc || "Extra beds and cribs are unavailable for this room type"]);
+  await sleep(500);
 
   await exec(tabId, () => {
     const input = document.querySelector('[data-testid="input-rs-room-numofrooms"]');
@@ -432,16 +434,14 @@ async function teraFillOneRoom(tabId, room, roomType) {
   });
   await sleep(500);
 
-  await exec(tabId, (sizeText) => {
-    const match = sizeText.match(/[\d.]+/);
-    if (!match) return;
+  await exec(tabId, (sizeValue) => {
     const input = document.querySelector('[data-testid="input-rs-room-size"]');
     if (!input) return;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, match[0]);
+    setter.call(input, sizeValue);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [room.sizeText || ""]);
+  }, [(room.sizeText && room.sizeText.match(/[\d.]+/)?.[0]) || getCountryDefaults(room.country).size]);
   await sleep(500);
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-unit"]')?.click());
@@ -559,7 +559,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
       const cb = document.querySelector(`[data-testid="checkbox-facility-${code}"]`);
       if (cb && !cb.checked) cb.click();
     }
-  }, [room.facilityStr || ""]);
+  }, [room.facilityStr || DEFAULT_FACILITIES]);
   await sleep(500);
   await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
   await sleep(500);
@@ -626,15 +626,153 @@ async function teraFillOneRoom(tabId, room, roomType) {
   });
   await sleep(500);
 
-  await exec(tabId, () => {
+  await exec(tabId, (amount) => {
     const input = document.querySelector('[data-testid="input-rs-room-rate-protection-amount"]');
     if (!input) return;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, '10000');
+    setter.call(input, amount);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  }, [getCountryDefaults(room.country).rateProtection]);
   await sleep(500);
+}
+
+// ── 사진 카테고리 자동 분류 + 적용 (mobilenet 라이브러리 우회, tf.loadLayersModel 직접 사용) ──
+async function classifyRoomPhotos(tabId) {
+  // 1) tf.min.js가 이미 로드되어 있는지 확인 후, 없을 때만 주입 (중복 등록 방지)
+  const tfLoaded = await exec(tabId, () => typeof window.tf !== 'undefined', [], "MAIN");
+  if (!tfLoaded?.[0]?.result) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      files: ["tf.min.js"]
+    });
+    await sleep(300);
+  }
+
+  // 2) 라벨 파일을 fetch해서 Tera 페이지로 전달 (extension 리소스 URL 사용)
+  const labelsUrl = chrome.runtime.getURL("imagenet_labels.json");
+  const labelsRes = await fetch(labelsUrl);
+  const labels = await labelsRes.json();
+
+  // 3) 모델 로드 + 각 이미지 분류 + 라벨 반환 (Tera 페이지 컨텍스트에서 실행)
+  const result = await exec(tabId, async (labels) => {
+    const BATHROOM_KEYWORDS = ['bathtub', 'tub, vat', 'shower curtain', 'toilet seat', 'washbasin'];
+    const BEDROOM_KEYWORDS = ['four-poster', 'studio couch', 'day bed', 'crib, cot', 'cradle'];
+
+    const mapTop5ToCategory = (top5Labels) => {
+      // top5Labels: 신뢰도 순으로 정렬된 라벨 문자열 배열
+      for (const label of top5Labels) {
+        const lower = (label || '').toLowerCase();
+        if (BATHROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bathroom';
+      }
+      for (const label of top5Labels) {
+        const lower = (label || '').toLowerCase();
+        if (BEDROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bedroom';
+      }
+      return 'Others';
+    };
+
+    try {
+      if (!window.__teraTfModel) {
+        window.__teraTfModel = await tf.loadLayersModel(
+          'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json'
+        );
+      }
+      const model = window.__teraTfModel;
+
+     const imgs = Array.from(document.querySelectorAll('img.css-fb1zjp'));
+      console.log('[classify] 이미지 개수:', imgs.length);
+      const results = [];
+
+      const loadCleanImage = (src) => new Promise((resolve, reject) => {
+        const cleanImg = new Image();
+        cleanImg.crossOrigin = 'anonymous';
+        cleanImg.onload = () => resolve(cleanImg);
+        cleanImg.onerror = reject;
+        cleanImg.src = src;
+      });
+
+      for (let i = 0; i < imgs.length; i++) {
+        const srcUrl = imgs[i].src;
+        try {
+          // fetch로 이미지를 blob으로 받아서 object URL로 다시 로드 (오염 회피)
+          const res = await fetch(srcUrl);
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const cleanImg = await loadCleanImage(objUrl);
+
+          const prediction = tf.tidy(() => {
+            let tensor = tf.browser.fromPixels(cleanImg)
+              .resizeBilinear([224, 224])
+              .toFloat();
+            tensor = tensor.div(127.5).sub(1); // normalize to [-1, 1]
+            tensor = tensor.expandDims(0);
+            return model.predict(tensor);
+          });
+          const data = await prediction.data();
+          prediction.dispose();
+          URL.revokeObjectURL(objUrl);
+
+          const top5 = Array.from(data).map((v, idx) => [idx, v]).sort((a,b) => b[1]-a[1]).slice(0, 5);
+          const top5Labels = top5.map(([idx]) => labels[String(idx)] || '');
+          console.log(`[classify] 사진 ${i}:`, top5.map(([idx, score]) => `${labels[String(idx)]} (${score.toFixed(3)})`));
+
+          const category = mapTop5ToCategory(top5Labels);
+          console.log(`[classify] 사진 ${i} 최종:`, top5Labels[0], '-> top5 검사 결과:', category);
+          results.push({ index: i, label: top5Labels[0], category });
+        } catch (e) {
+          console.log(`[classify] 사진 ${i} 에러:`, e.message);
+          results.push({ index: i, label: '', category: 'Others' });
+        }
+      }
+
+      // 첫/마지막 사진 보정: AI가 Others로 떨어졌고, 다른 사진 중에 해당 카테고리가 전혀 없을 때만 강제 지정
+      if (results.length > 0) {
+        const lastIdx = results.length - 1;
+
+        const hasBedroomElsewhere = results.some((r, idx) => idx !== 0 && r.category === 'Bedroom');
+        if (results[0].category === 'Others' && !hasBedroomElsewhere) {
+          results[0].category = 'Bedroom';
+          console.log('[classify] 첫 사진 보정 -> Bedroom');
+        }
+
+        const hasBathroomElsewhere = results.some((r, idx) => idx !== lastIdx && r.category === 'Bathroom');
+        if (results[lastIdx].category === 'Others' && !hasBathroomElsewhere) {
+          results[lastIdx].category = 'Bathroom';
+          console.log('[classify] 마지막 사진 보정 -> Bathroom');
+        }
+      }
+
+      return results;
+    } catch (e) {
+      console.log('[classify] error:', e.message);
+      return [];
+    }
+  }, [labels], "MAIN");
+
+  const classifications = result?.[0]?.result || [];
+
+  // 4) 분류 결과대로 각 사진의 카테고리 드롭다운 클릭
+  for (const { index, category } of classifications) {
+    await exec(tabId, (idx) => {
+      const dropdown = document.querySelector(`[data-testid="select-asset-category-${idx}"]`);
+      dropdown?.click();
+    }, [index], "MAIN");
+    await sleep(500);
+
+    await exec(tabId, (idx, cat) => {
+      const options = document.querySelectorAll(`[data-testid="select-asset-category-${idx}-options"] span`);
+      const found = Array.from(options).find(s => s.textContent.trim() === cat);
+      found?.closest('div').click();
+    }, [index, category], "MAIN");
+    await sleep(400);
+
+    await exec(tabId, () => document.body.click(), [], "MAIN");
+    await sleep(200);
+  }
+
+  return classifications;
 }
 
 // ── Hotel Info Scripts ──
@@ -1041,54 +1179,8 @@ async function processApiData(data, apiData) {
 
 // ── Event Listeners ──
 
-// Room Autofill
-document.getElementById("teraBtn").addEventListener("click", async () => {
-  if (roomData.length === 0) { setTeraStatus(t().teraNoRooms, "error"); return; }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab.url?.includes("tera.traveloka.com")) { setTeraStatus(t().teraNotTera, "error"); return; }
-
-  const btn = document.getElementById("teraBtn");
-  btn.disabled = true;
-  document.getElementById("pauseToggleBtn").style.display = "block";
-  isPaused = false;
-  try {
-    for (let i = 0; i < roomData.length; i++) {
-      const room = roomData[i];
-      if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
-      setTeraStatus(t().teraRunning(i + 1, roomData.length));
-      await teraFillOneRoom(tab.id, room, matchRoomType(room.roomName));
-      await waitForContinue(room.roomName);
-      await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
-      await sleep(1500);
-      await exec(tab.id, () => {
-        Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click();
-      });
-      await sleep(3000);
-      while (true) {
-        const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
-        if (!urlCheck?.[0]?.result) break;
-        await waitForContinue(room.roomName, true);
-        await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
-        await sleep(1500);
-        await exec(tab.id, () => {
-          Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click();
-        });
-        await sleep(3000);
-      }
-      await sleep(800);
-    }
-    setTeraStatus(t().teraDone(roomData.length), "success");
-  } catch (err) {
-    setTeraStatus(t().teraError(err.message), "error");
-  }
-  document.getElementById("pauseToggleBtn").style.display = "none";
-  isPaused = false;
-  btn.disabled = false;
-});
-
-// Room Scan
+// Room Scan (방 목록만 추출, ZIP 생성 없음)
 document.getElementById("startBtn").addEventListener("click", async () => {
-  const hotelName = document.getElementById("hotelName").value.trim();
   const btn = document.getElementById("startBtn");
   btn.disabled = true;
   roomData = [];
@@ -1104,16 +1196,15 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
     setStatus(t().scan1);
     const result = await scanTab(tab.id);
-    const hotelPhotos = result.hotelPhotos || [];
     const allRooms = new Map();
     (result.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
-    setStatus(t().scan1done(allRooms.size, hotelPhotos.length));
 
     const finalRooms = [...allRooms.values()];
     if (finalRooms.length === 0) { setStatus(t().noRooms, "error"); btn.disabled = false; return; }
 
     roomData = finalRooms;
     chrome.storage.session.set({ roomData: finalRooms });
+    setStatus(t().scan1done(finalRooms.length), "success");
 
     const roomList = document.getElementById("roomList");
     roomList.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="checkAll" checked> All</label></div>`;
@@ -1129,69 +1220,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     });
     roomList.style.display = "block";
     document.getElementById("selectFillBtn").style.display = "block";
-
-    if (typeof JSZip === "undefined") { setStatus(t().noJszip(finalRooms.length), "success"); btn.disabled = false; return; }
-
-    setStatus(t().zipping);
-    const zip = new JSZip();
-    const folderName = sanitizeName(hotelName || String(Date.now()));
-    const hotelFolder = zip.folder(folderName);
-    const normalizeUrl = url => url.split('?')[0].trim();
-    let photoCount = 0;
-
-    const processChunk = async (urls) => Promise.all(urls.map(async (url) => {
-      const ext = url.includes(".webp") ? "jpg" : (url.match(/\.(jpg|jpeg|png)/i)?.[1] || "jpg");
-      try {
-        const urlLow = isLowQualityUrl(url);
-        const res = await fetch(url);
-        let blob = await res.blob();
-        let low = false;
-        if (urlLow) { low = true; }
-        else { const r = await checkAndUpscale(blob); blob = r.blob; low = r.isLow; }
-        return { blob, low, ext };
-      } catch { return null; }
-    }));
-
-    for (const room of finalRooms) {
-      if (!room.roomPhotos?.length) continue;
-      const roomFolder = hotelFolder.folder(sanitizeName(room.roomName));
-      let idx = 1;
-      const seen = new Set();
-      const unique = room.roomPhotos.filter(url => { if (!url || seen.has(normalizeUrl(url))) return false; seen.add(normalizeUrl(url)); return true; });
-      for (let i = 0; i < unique.length; i += 6) {
-        for (const r of await processChunk(unique.slice(i, i + 6))) {
-          if (!r) continue;
-          roomFolder.file(`${String(idx).padStart(2,"0")}${r.low ? "_LOW_QUALITY" : ""}.${r.ext}`, r.blob);
-          idx++; photoCount++;
-        }
-      }
-    }
-
-    if (hotelPhotos.length > 0) {
-      const photoFolder = hotelFolder.folder("Hotel Photo");
-      const seen = new Set();
-      const unique = hotelPhotos.filter(url => { if (!url || seen.has(normalizeUrl(url))) return false; seen.add(normalizeUrl(url)); return true; });
-      let idx = 1;
-      for (let i = 0; i < unique.length; i += 6) {
-        for (const r of await processChunk(unique.slice(i, i + 6))) {
-          if (!r) continue;
-          photoFolder.file(`${String(idx).padStart(2,"0")}${r.low ? "_LOW_QUALITY" : ""}.${r.ext}`, r.blob);
-          idx++; photoCount++;
-        }
-      }
-    }
-
-    if (photoCount > 0) {
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(zipBlob);
-      a.download = `${folderName}_photos.zip`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setStatus(t().done(finalRooms.length, photoCount), "success");
-    } else {
-      setStatus(t().noPhotos(finalRooms.length), "success");
-    }
   } catch (err) {
     console.error("[Tera] 에러:", err);
     setStatus("Error: " + err.message, "error");
@@ -1205,6 +1233,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
   btn.disabled = true;
   currentHotelData = null;
   setExtractStatus(t().extracting);
+  openOrFocusSheet();
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1222,8 +1251,8 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
 
     // Sheet 전송
-    await exec(tab.id, (d) => {
-      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz384ObCq18jDZIpzbmTDOQOSO00a62xS7urqFoIV1ksyxhPz3-rkpkcn6KCf6OEGGG/exec";
+       await exec(tab.id, (d, personName) => {
+      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzJw0zPaNbeh3dpygO393HkmQVvlpCXkVpIcySbxGqFBqLyyWQiCHWRCI2C8KUfyKAm/exec";
       const hotelFacilityMap = [
         {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},{keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
         {keywords:["private pool"],code:"PRIVATE_POOL"},{keywords:["shower"],code:"SHOWER"},{keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
@@ -1281,9 +1310,11 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
       const hotelFacilities = facilityData ? extractFacilities(facilityData) : "";
       fetch(HOTEL_WEB_APP_URL, {
         method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities })
+        body: JSON.stringify({ type: "hotel", hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities, personName })
       });
-    }, [currentHotelData], "MAIN");
+    }, [currentHotelData, selectedPerson || "Others"], "MAIN");
+
+    await openOrFocusTab("https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/*", HOTEL_SHEET_URL);
 
   } catch (e) {
     setExtractStatus("Error: " + e.message, "error");
@@ -1297,8 +1328,8 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const btn = document.getElementById("sheetBtn");
 
-  if (!currentHotelData) {
-    if (!tab.url?.includes("trip.com")) { setExtractStatus(t().extractNotTrip, "error"); return; }
+  // 지금 탭이 Trip.com이면: 추출 → currentHotelData 갱신 → Tera 탭으로 이동
+  if (tab.url?.includes("trip.com")) {
     btn.disabled = true;
     setExtractStatus(t().extracting);
     try {
@@ -1310,6 +1341,14 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       await processApiData(data, apiData);
       currentHotelData = data;
       setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
+
+      await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
+      setExtractStatus(
+        (currentLang === 'kr'
+          ? `${data.name_en || '호텔'} - 버튼을 한 번 더 눌러서 시작해 주세요.`
+          : `${data.name_en || 'Hotel'} - Click one more time to begin.`),
+        "success"
+      );
     } catch (e) {
       setExtractStatus("Error: " + e.message, "error");
     } finally {
@@ -1318,10 +1357,30 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
     return;
   }
 
-  if (!tab.url?.includes("tera.traveloka.com")) { setExtractStatus(t().hotelInsertNotTera, "error"); return; }
-  btn.disabled = true;
-  await runHotelAutofill(tab.id);
-  btn.disabled = false;
+  // 지금 탭이 Tera면: Details 탭 클릭 (필요시 이동 확인 모달 처리) → 자동입력 실행
+  if (tab.url?.includes("tera.traveloka.com")) {
+    if (!currentHotelData) { setExtractStatus(t().hotelInsertNoData, "error"); return; }
+    btn.disabled = true;
+
+    await exec(tab.id, () => {
+      Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Details")?.click();
+    });
+    await sleep(800);
+
+    // "저장 안 하고 이동하시겠습니까?" 확인 모달이 뜨면 "Yes, move to the other tab" 클릭
+    const movePrompt = await exec(tab.id, () => {
+      const btn = Array.from(document.querySelectorAll('button span')).find(el => el.textContent.trim() === 'Yes, move to the other tab');
+      if (btn) { btn.closest('button').click(); return true; }
+      return false;
+    });
+    if (movePrompt?.[0]?.result) await sleep(1000);
+
+    await runHotelAutofill(tab.id);
+    btn.disabled = false;
+    return;
+  }
+
+  setExtractStatus(t().extractNotTrip, "error");
 });
 
 // Init
@@ -1329,6 +1388,15 @@ setLang(currentLang);
 document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
 document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
 checkForUpdates();
+
+document.querySelectorAll('.person-btn').forEach(btn => {
+  if (btn.dataset.person === selectedPerson) btn.classList.add('active');
+  btn.addEventListener('click', () => {
+    selectedPerson = btn.dataset.person;
+    localStorage.setItem('teraPerson', selectedPerson);
+    document.querySelectorAll('.person-btn').forEach(b => b.classList.toggle('active', b === btn));
+  });
+});
 
 // Reset
 document.getElementById("resetBtn").addEventListener("click", () => {
@@ -1351,7 +1419,7 @@ document.getElementById("pauseToggleBtn").addEventListener("click", () => {
   if (!isPaused && pauseResolve) { pauseResolve(); pauseResolve = null; }
 });
 
-// Selectfill
+// Selectfill (선택한 방만 처리)
 document.getElementById("selectFillBtn").addEventListener("click", async () => {
   const selected = Array.from(document.querySelectorAll(".room-cb:checked")).map(cb => roomData[parseInt(cb.dataset.index)]);
   if (selected.length === 0) { setTeraStatus(currentLang === 'kr' ? "선택된 방이 없어요." : "No rooms selected.", "error"); return; }
@@ -1367,6 +1435,9 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
       if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
       setTeraStatus(t().teraRunning(i + 1, selected.length));
       await teraFillOneRoom(tab.id, room, matchRoomType(room.roomName));
+      const photos = await fetchPhotosAsBase64(room.roomPhotos);
+      await uploadRoomPhotos(tab.id, photos);
+      await classifyRoomPhotos(tab.id);
       await waitForContinue(room.roomName);
       await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
       await sleep(1500);
@@ -1643,3 +1714,101 @@ document.getElementById("editResetBtn").addEventListener("click", () => {
   list.innerHTML = `<div class="room-item" id="editCheckAllRow"><label class="room-check-all"><input type="checkbox" id="editCheckAll"> All</label></div>`;
   setEditStatus("");
 });
+
+// ===== 사진 업로드 (Trip → Tera) =====
+// 방 사진 URL들을 popup에서 fetch → base64 배열로 (CSP 회피)
+async function fetchPhotosAsBase64(urls) {
+  const seen = new Set();
+  const unique = (urls || []).filter(u => { const k = (u || '').split('?')[0]; if (!u || seen.has(k)) return false; seen.add(k); return true; });
+  const out = [];
+  for (const url of unique) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      out.push(b64);
+    } catch (e) { /* 실패한 사진은 건너뜀 */ }
+  }
+  return out;
+}
+
+// 열린 폼의 dropzone에 사진들을 drop 주입 + Upload (한 장씩)
+async function uploadRoomPhotos(tabId, base64List) {
+  if (!base64List || base64List.length === 0) return;
+  for (const b64 of base64List) {
+    await exec(tabId, async (b64) => {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      try {
+        // base64 직접 디코딩 (fetch 안 씀 = CSP 회피)
+        const comma = b64.indexOf(',');
+        const mime = b64.slice(0, comma).match(/data:(.*?);/)[1];
+        const bin = atob(b64.slice(comma + 1));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mime });
+
+        // webp → jpg 변환 (Tera는 jpg/png만)
+        const imgUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = imgUrl; });
+        let sw = img.naturalWidth, sh = img.naturalHeight;
+        // 가장 가까운 허용 비율로 맞추기 (1:1, 3:2, 16:9)
+        const curRatio = sw / sh;
+        const allowed = [1, 1.5, 1.7778];
+        const target = allowed.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
+        // center-crop 영역 계산
+        let sx = 0, sy = 0, cropW = sw, cropH = sh;
+        if (curRatio > target) { cropW = Math.round(sh * target); sx = Math.round((sw - cropW) / 2); }
+        else { cropH = Math.round(sw / target); sy = Math.round((sh - cropH) / 2); }
+        // 출력 크기 (4000 경계 제한)
+        let cw = cropW, ch = cropH;
+        const MAXD = 4000;
+        if (cw > MAXD || ch > MAXD) {
+          const scale = Math.min(MAXD / cw, MAXD / ch);
+          cw = Math.round(cw * scale); ch = Math.round(ch * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        URL.revokeObjectURL(imgUrl);
+        const jpgBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
+        const file = new File([jpgBlob], 'photo.jpg', { type: 'image/jpeg' });
+
+        // dropzone에 drop 이벤트로 주입 (change는 인증 안 붙음, drop은 붙음)
+        const input = document.querySelector('[data-testid="upload-dropzone-1"]');
+        if (!input) return;
+        const dropTarget = input.closest('div') || input;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        for (const type of ['dragenter', 'dragover', 'drop']) {
+          dropTarget.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+          await delay(150);
+        }
+
+        // 프리뷰 모달(slick-slider)이 뜰 때까지 대기 (최대 5초)
+        let previewBtn = null;
+        for (let i = 0; i < 20; i++) {
+          await delay(250);
+          previewBtn = document.querySelector('[data-testid="button-upload-preview-photo"]');
+          if (previewBtn && previewBtn.offsetParent) break;
+          previewBtn = null;
+        }
+        if (!previewBtn) return; // 프리뷰가 안 뜨면 이 사진은 건너뜀
+
+        previewBtn.click();
+
+        // 프리뷰 모달이 DOM에서 완전히 사라질 때까지 대기 (최대 8초)
+        for (let i = 0; i < 32; i++) {
+          await delay(250);
+          if (!document.querySelector('[data-testid="button-upload-preview-photo"]')) break;
+        }
+
+        // 모달 close 애니메이션 + slick-slider 정리 시간 확보
+        await delay(600);
+      } catch (e) { /* 한 장 실패해도 계속 */ }
+    }, [b64], "MAIN");
+    await sleep(300); // popup-content 핸드오프 최소 간격
+  }
+}

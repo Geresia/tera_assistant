@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tera Assistant",
-  "version": "5.11",
+  "version": "5.2",
   "description": "Tera Assistant",
   "permissions": [
     "tabs",
@@ -17,7 +17,9 @@
     "https://*.tripcdn.com/*",
     "https://*.c-ctrip.com/*",
     "https://raw.githubusercontent.com/*",
-    "https://tera.traveloka.com/*"
+    "https://tera.traveloka.com/*",
+    "https://tfhub.dev/*",
+    "https://storage.googleapis.com/*"
   ],
   "action": {
     "default_icon": {
@@ -34,8 +36,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["jszip.min.js"],
-      "matches": ["https://www.trip.com/*"]
+      "resources": ["tf.min.js", "mobilenet.min.js", "imagenet_labels.json"],
+      "matches": ["https://tera.traveloka.com/*"]
     }
   ]
 }
