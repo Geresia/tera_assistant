@@ -43,12 +43,11 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ### Hotel Info
 | Button | Description |
 |---|---|
-| **Hotel Bulk Insert** | Extracts hotel data from Trip.com and auto-fills Tera Details, Overview, and Address tabs |
+| **Hotel Bulk Insert** | Auto-fills Tera Details, Overview, and Address tabs |
 | **Hotel Detail Insert** | Sends hotel data to Google Sheets |
 
-1. Go to any Trip.com hotel page
-2. Open the extension Side Panel
-3. Click the button you need
+1. Open the extension Side Panel on the hotel page
+2. Click the button you need
 
 ### Create New Room
 1. Enter the **Hotel Name** (used for photo ZIP folder name)
