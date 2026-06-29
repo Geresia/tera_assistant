@@ -67,7 +67,7 @@ Double click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 | Button | Description |
 |---|---|
 | **Bed Scan** | Scans existing rooms on Tera and lists them |
-| **Room Update** | Auto-updates bed configuration for selected rooms |
+| **Room Update** | Auto updates bed configuration for selected rooms |
 
 ---
 
