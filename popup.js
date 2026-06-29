@@ -29,7 +29,6 @@ const STRINGS = {
     hotelAutofillAddress: "Address 입력 중...",
     hotelAutofillDone: "완료!",
     hotelAutofillReload: "페이지 리로드됨 - 다시 시도해주세요.",
-    update: (v) => `v${v} 업데이트 해주세요`,
   },
   en: {
     startBtn: "Room Scan",
@@ -59,7 +58,6 @@ const STRINGS = {
     hotelAutofillAddress: "Filling Address...",
     hotelAutofillDone: "Done!",
     hotelAutofillReload: "Page reloaded — please try again.",
-    update: (v) => `v${v} update available`,
   }
 };
 
@@ -271,8 +269,6 @@ function setLang(lang) {
   document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
   document.getElementById('extractBtn').textContent = STRINGS[lang].extractBtn;
   document.getElementById('sheetBtn').textContent = STRINGS[lang].hotelInsertBtn;
-  const banner = document.getElementById('updateBanner');
-  if (banner.dataset.version) banner.textContent = STRINGS[lang].update(banner.dataset.version);
   const pauseLabel = document.getElementById('pauseLabel');
   if (pauseLabel) pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'Photo Upload';
 }
@@ -325,11 +321,7 @@ async function checkForUpdates() {
     const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
-      const banner = document.getElementById("updateBanner");
-      banner.style.display = "block";
-      banner.dataset.version = data.version;
-      banner.textContent = t().update(data.version);
-      banner.onclick = () => window.open("https://github.com/Geresia/tera_assistant/releases", "_blank");
+      alert(`New update available (v${data.version})!\nPlease run Tera_Update.bat to update. Thank you!`);
     }
   } catch (e) { console.log("Version check failed:", e.message); }
 }
