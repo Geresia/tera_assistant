@@ -346,7 +346,7 @@ async function scrapeHotelPhotos() {
     return (detail?.hotelTopImage?.imgUrlList || []).flatMap(img => {
       const pos1 = img.diffPositionUrls?.find(u => u.position === 1);
       return pos1 ? [pos1.picUrl] : img.imgUrl ? [img.imgUrl] : [];
-    }).filter(Boolean);
+    }).filter(Boolean).slice(0, 10);
   } catch (e) { console.log("[scan] Hotel photo error:", e.message); return []; }
 }
 

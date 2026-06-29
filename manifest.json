@@ -19,6 +19,7 @@
     "https://*.c-ctrip.com/*",
     "https://raw.githubusercontent.com/*",
     "https://tera.traveloka.com/*",
+    "https://*.traveloka.com/*",
     "https://tfhub.dev/*",
     "https://storage.googleapis.com/*"
   ],

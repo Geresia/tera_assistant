@@ -81,7 +81,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.2";
+const CURRENT_VERSION = "5.3";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -117,17 +117,6 @@ const BED_TYPE_MAP = {
   twin: 'Twin', bunk: 'Bunk', capsule: 'Capsule', mattress: 'Mattress',
   sofa: 'Sofa', futon: 'Mattress',
 };
-
-// ── 사진 카테고리 자동 분류 (MobileNet) ──
-const BEDROOM_KEYWORDS = ['four-poster', 'studio couch', 'cradle', 'crib', 'bunk bed', 'bed'];
-const BATHROOM_KEYWORDS = ['toilet seat', 'tub', 'bathtub', 'shower curtain', 'washbasin', 'sink', 'toilet'];
-
-function mapLabelToCategory(label) {
-  const lower = (label || '').toLowerCase();
-  if (BATHROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bathroom';
-  if (BEDROOM_KEYWORDS.some(k => lower.includes(k))) return 'Bedroom';
-  return 'Others';
-}
 
 // ── 국가별 디폴트값 (Trip.com 스캔 데이터 없을 때만 사용) ──
 const COUNTRY_DEFAULTS = {
@@ -322,8 +311,8 @@ function waitForContinue(roomName, isError = false) {
     const msgEl = document.getElementById('pauseMsg');
     const btn = document.getElementById('continueBtn');
     msgEl.textContent = isError
-      ? (currentLang === 'kr' ? `${roomName} — 에러가 있어요. 수정 후 계속을 눌러주세요.` : `${roomName} — Error detected. Fix it, then click Continue.`)
-      : (currentLang === 'kr' ? `${roomName} 더블 체크 후 계속을 눌러주세요.` : `${roomName} Double-check, then click Continue.`);
+      ? (currentLang === 'kr' ? `${roomName} — 에러가 있습니다. 수정 후 continue을 눌러주세요.` : `${roomName} — Error detected. Fix it, then click Continue.`)
+      : (currentLang === 'kr' ? `${roomName} 더블 체크 후 continue을 눌러주세요.` : `${roomName} Double check, then click Continue.`);
     msgEl.style.color = isError ? '#d93025' : '';
     box.style.display = 'block';
     btn.textContent = currentLang === 'kr' ? '완료' : 'Continue';
@@ -684,7 +673,7 @@ async function classifyRoomPhotos(tabId) {
     const BATHROOM_DIRECT  = ['bathtub', 'tub, vat', 'shower curtain', 'toilet seat', 'washbasin'];
     const BATHROOM_CONTEXT = ['soap dispenser', 'soap dish', 'plunger', 'bathrobe'];
     const BEDROOM_DIRECT   = ['four-poster', 'studio couch', 'day bed', 'crib, cot', 'cradle', 'bunk bed'];
-    const BEDROOM_CONTEXT  = ['quilt', 'comforter', 'pillow', 'blanket', 'couch', 'wardrobe', 'chest', 'ottoman'];
+    const BEDROOM_CONTEXT  = ['quilt', 'comforter', 'pillow', 'blanket', 'couch', 'wardrobe', 'chest of drawers', 'ottoman'];
 
     const mapTop15ToCategory = (top15) => {
       const scores = { Bathroom: 0, Bedroom: 0 };
@@ -800,126 +789,6 @@ async function classifyRoomPhotos(tabId) {
   }
 
   return classifications;
-}
-
-// ── Hotel Photo Category Classification ──
-async function classifyHotelPhotos(tabId, count) {
-  // 1) TF.js 주입
-  const tfLoaded = await exec(tabId, () => typeof window.tf !== 'undefined', [], "MAIN");
-  if (!tfLoaded?.[0]?.result) {
-    await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", files: ["tf.min.js"] });
-    await sleep(300);
-  }
-
-  // 2) 라벨 로드
-  if (!_labelsCache) {
-    const labelsRes = await fetch(chrome.runtime.getURL("imagenet_labels.json"));
-    _labelsCache = await labelsRes.json();
-  }
-  const labels = _labelsCache;
-
-  // 3) 모델 로드 + 전체 이미지 수 확인
-  setTeraStatus(`Loading model...`);
-  const initRes = await exec(tabId, async () => {
-    if (!window.__teraTfModel) {
-      window.__teraTfModel = await tf.loadLayersModel(
-        'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json'
-      );
-    }
-    return Array.from(document.querySelectorAll('img.css-fb1zjp')).length;
-  }, [], "MAIN");
-
-  const totalImgs = initRes?.[0]?.result ?? 0;
-  const startIdx = Math.max(0, totalImgs - count);
-
-  // 4) 사진 한 장씩 분류 (popup status 업데이트 가능)
-  const results = [];
-  for (let i = 0; i < count; i++) {
-    const globalIdx = startIdx + i;
-    setTeraStatus(`Classifying hotel photo ${i + 1}/${count}...`);
-
-    const res = await exec(tabId, async (globalIdx, labels) => {
-      const BATHROOM_DIRECT  = ['bathtub', 'tub, vat', 'shower curtain', 'toilet seat', 'washbasin'];
-      const BATHROOM_CONTEXT = ['soap dispenser', 'soap dish', 'plunger', 'bathrobe'];
-      const BEDROOM_DIRECT   = ['four-poster', 'studio couch', 'day bed', 'crib, cot', 'cradle', 'bunk bed'];
-      const BEDROOM_CONTEXT  = ['quilt', 'comforter', 'pillow', 'blanket', 'couch', 'wardrobe', 'chest', 'ottoman'];
-      const EXTERIOR_DIRECT  = ['church', 'mosque', 'palace', 'castle', 'monastery', 'greenhouse',
-                                'fountain', 'lakeside', 'seashore', 'cliff dwelling', 'barn', 'boathouse',
-                                'valley', 'alp', 'villa'];
-      const EXTERIOR_CONTEXT = ['beach', 'promontory', 'sandbar', 'garden', 'dock'];
-      const mapToCategory = (top15) => {
-        const scores = { Bathroom: 0, Bedroom: 0, 'Exterior / Building': 0 };
-        for (const [idx, score] of top15) {
-          if (score < 0.030) continue;
-          const lower = (labels[String(idx)] || '').toLowerCase();
-          if      (BATHROOM_DIRECT.some(k => lower.includes(k)))  scores.Bathroom += score * 1.5;
-          else if (BATHROOM_CONTEXT.some(k => lower.includes(k))) scores.Bathroom += score * 1.0;
-          else if (BEDROOM_DIRECT.some(k => lower.includes(k)))   scores.Bedroom  += score * 1.5;
-          else if (BEDROOM_CONTEXT.some(k => lower.includes(k)))  scores.Bedroom  += score * 1.0;
-          else if (EXTERIOR_DIRECT.some(k => lower.includes(k)))  scores['Exterior / Building'] += score * 1.5;
-          else if (EXTERIOR_CONTEXT.some(k => lower.includes(k))) scores['Exterior / Building'] += score * 1.0;
-        }
-        const best = Object.entries(scores).reduce((a, b) => b[1] > a[1] ? b : a);
-        if (best[1] === 0) return 'Others';
-        return best[0];
-      };
-      try {
-        const img = document.querySelectorAll('img.css-fb1zjp')[globalIdx];
-        if (!img) return { index: globalIdx, category: 'Others' };
-        const blob = await (await fetch(img.src)).blob();
-        const objUrl = URL.createObjectURL(blob);
-        const cleanImg = await new Promise((res, rej) => {
-          const im = new Image(); im.crossOrigin = 'anonymous';
-          im.onload = () => res(im); im.onerror = rej; im.src = objUrl;
-        });
-        const pred = tf.tidy(() =>
-          window.__teraTfModel.predict(
-            tf.browser.fromPixels(cleanImg).resizeBilinear([224,224]).toFloat().div(127.5).sub(1).expandDims(0)
-          )
-        );
-        const data = await pred.data(); pred.dispose(); URL.revokeObjectURL(objUrl);
-        const top15 = Array.from(data).map((v,idx)=>[idx,v]).sort((a,b)=>b[1]-a[1]).slice(0,15);
-        const category = mapToCategory(top15);
-        console.log(`[hotel classify] 사진 ${globalIdx}: ${labels[String(top15[0][0])] || ''} → ${category}`);
-        return { index: globalIdx, category };
-      } catch (e) {
-        console.log(`[hotel classify] 사진 ${globalIdx} 에러:`, e.message);
-        return { index: globalIdx, category: 'Others' };
-      }
-    }, [globalIdx, labels], "MAIN");
-
-    results.push(res?.[0]?.result || { index: globalIdx, category: 'Others' });
-  }
-
-  // 5) Lobby 없으면 마지막 사진 → Lobby
-  if (results.length > 0 && !results.some(r => r.category === 'Lobby')) {
-    results[results.length - 1].category = 'Lobby';
-    console.log('[hotel classify] Lobby 없음 → 마지막 사진 Lobby 지정');
-  }
-
-  // 6) 드롭다운 적용 — 마지막 count개의 .css-18tipgy 트리거 사용
-  for (let i = 0; i < results.length; i++) {
-    const { category } = results[i];
-    setTeraStatus(`Setting caption ${i + 1}/${results.length}: ${category}`);
-
-    // 트리거 클릭 (마지막 count개 중 i번째)
-    await exec(tabId, (localIdx, count) => {
-      const all = Array.from(document.querySelectorAll('.css-18tipgy'));
-      const target = all[all.length - count + localIdx];
-      target?.click();
-    }, [i, count], "MAIN");
-    await sleep(500);
-
-    // 옵션 선택
-    await exec(tabId, (cat) => {
-      const option = Array.from(document.querySelectorAll('.css-1dkjnn4 .css-46sq7k'))
-        .find(s => s.textContent.trim() === cat);
-      option?.closest('.css-1dkjnn4')?.click();
-    }, [category], "MAIN");
-    await sleep(400);
-  }
-
-  return results;
 }
 
 // ── Hotel Info Scripts ──
@@ -1605,6 +1474,7 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
       await teraFillOneRoom(tab.id, room, matchRoomType(room.roomName));
       const photos = await fetchPhotosAsBase64(room.roomPhotos);
       await uploadRoomPhotos(tab.id, photos);
+      setTeraStatus(currentLang === 'kr' ? 'AI 사진 분류 중...' : 'Classifying photos with AI...');
       await classifyRoomPhotos(tab.id);
       await waitForContinue(room.roomName);
       await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
@@ -2123,22 +1993,41 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
       }
     }, [base64List[i]], "MAIN");
 
-    await sleep(500);
-
-    // Check server response code
-    const codeRes = await exec(tabId, () => window.__teraUploadCode, [], "MAIN");
-    const code = codeRes?.[0]?.result;
-    const statusMsg = code === 200 ? `Photo ${i + 1} 완료` : code == null ? `Photo ${i + 1} 응답 없음` : `Photo ${i + 1} 오류 (${code})`;
+    // Wait for server response code (poll up to 30s)
+    let code = null;
+    for (let w = 0; w < 60; w++) {
+      await sleep(500);
+      const codeRes = await exec(tabId, () => window.__teraUploadCode, [], "MAIN");
+      code = codeRes?.[0]?.result;
+      if (code !== null && code !== undefined) break;
+    }
+    const statusMsg = code === 200
+      ? (currentLang === 'kr' ? `Photo ${i + 1} 완료 — complete` : `Photo ${i + 1} complete`)
+      : (currentLang === 'kr' ? `Photo ${i + 1} 실패 — failed (${code ?? 'no response'})` : `Photo ${i + 1} failed (${code ?? 'no response'})`);
     setTeraStatus(statusMsg, code === 200 ? '' : 'error');
-    await sleep(1500);
-    if (code === 401 || code === -1) {
+    if (code !== 200) {
+      await sleep(1500);
+      let retryNow = false;
+      const teraEl = document.getElementById("teraStatus");
+      const showCountdown = (s) => {
+        const msg = currentLang === 'kr'
+          ? `Photo ${i + 1} 오류 (${code ?? 'no response'}) — ${s}초 후 재시도...`
+          : `Photo ${i + 1} error (${code ?? 'no response'}) — retrying in ${s}s...`;
+        teraEl.innerHTML = `${msg} <button id="retryNowBtn" style="margin-left:6px;padding:2px 8px;font-size:11px;border-radius:6px;background:#0071e3;color:#fff;border:none;cursor:pointer;">Retry now</button>`;
+        teraEl.className = "status error";
+        const btn = document.getElementById("retryNowBtn");
+        if (btn) btn.onclick = () => { retryNow = true; };
+      };
       for (let s = 60; s > 0; s--) {
-        setTeraStatus(`인증 오류 (401) — ${s}초 후 재시도...`, "error");
+        if (retryNow) break;
+        showCountdown(s);
         await sleep(1000);
       }
+      setTeraStatus('', '');
       continue; // retry same i
     }
 
+    await sleep(1500);
     i++;
   }
 
@@ -2159,10 +2048,6 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
     btn?.closest('button')?.click();
   }, [], "MAIN");
 
-  // Caption classification after "Add the selected photos"
-  await sleep(2000);
-  setTeraStatus(`Classifying hotel photo captions...`);
-  await classifyHotelPhotos(tabId, base64List.length);
 }
 
 document.getElementById("hotelPhotoBtn").addEventListener("click", async () => {
