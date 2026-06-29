@@ -1,6 +1,10 @@
 ![Version](https://img.shields.io/badge/version-5.3-blue)
 ![Chrome Extension](https://img.shields.io/badge/Chrome-MV3-green)
 ![JavaScript](https://img.shields.io/badge/JavaScript-91%25-yellow)
+![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-MobileNet-orange)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+![Last Commit](https://img.shields.io/github/last-commit/Geresia/tera_assistant)
 
 # Tera Assistant - Chrome Extension
 A Chrome Extension that extracts hotel and room data from Trip.com and automatically fills it into tera.traveloka.com, with photo upload and ZIP download support.
