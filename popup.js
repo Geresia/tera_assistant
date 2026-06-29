@@ -326,6 +326,126 @@ async function checkForUpdates() {
   } catch (e) { console.log("Version check failed:", e.message); }
 }
 
+// ── Agoda Bed Group Merge ──
+function getBaseRoomName(name) {
+  return name.replace(/\s*-\s*\d+.+?(bed|bunk|cot|twin|king|queen|single|double|sofa)s?\.?\s*$/i, '').trim();
+}
+
+function askBedMerge(groupName, rooms) {
+  return new Promise(resolve => {
+    const box = document.getElementById('bedMergeBox');
+    const listEl = document.getElementById('bedMergeList');
+    document.getElementById('bedMergeGroupName').textContent = `"${groupName}" — ${rooms.length}종`;
+    const grpOptions = ['Room 1', 'Room 2', 'Room 3', 'Separate'];
+    listEl.innerHTML = rooms.map((r, i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid #f0f0f5;">
+        <select class="bed-group-sel" data-index="${i}"
+                style="font-size:11px;border:0.5px solid #d1d1d6;border-radius:6px;padding:3px 5px;background:#f5f5f7;color:#1d1d1f;flex-shrink:0;cursor:pointer;">
+          ${grpOptions.map(g => `<option value="${g}">${g}</option>`).join('')}
+        </select>
+        <div style="min-width:0;">
+          <div style="font-size:12px;font-weight:500;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.bedText || '—'}</div>
+          <div style="font-size:11px;color:#aeaeb2;">${[r.sizeText ? r.sizeText + ' sqm' : '', r.occupancy || '', r.priceText || ''].filter(Boolean).join(' · ')}</div>
+        </div>
+      </div>
+    `).join('');
+    box.style.display = 'block';
+    document.getElementById('bedMergeApply').onclick = () => {
+      const assignments = Array.from(listEl.querySelectorAll('.bed-group-sel')).map((sel, i) => ({ index: i, grp: sel.value }));
+      box.style.display = 'none';
+      resolve(assignments);
+    };
+    document.getElementById('bedMergeSkip').onclick = () => {
+      box.style.display = 'none';
+      resolve(rooms.map((_, i) => ({ index: i, grp: 'Separate' })));
+    };
+  });
+}
+
+async function processBedGroups(rooms) {
+  const groups = new Map();
+  for (const room of rooms) {
+    const base = getBaseRoomName(room.roomName);
+    if (!groups.has(base)) groups.set(base, []);
+    groups.get(base).push(room);
+  }
+  const result = [];
+  for (const [baseName, group] of groups) {
+    if (group.length === 1 || baseName === group[0].roomName) {
+      result.push(...group);
+      continue;
+    }
+    const assignments = await askBedMerge(baseName, group);
+    const grpMap = new Map();
+    for (const { index, grp } of assignments) {
+      if (grp === 'Separate') { result.push(group[index]); continue; }
+      if (!grpMap.has(grp)) grpMap.set(grp, []);
+      grpMap.get(grp).push(group[index]);
+    }
+    for (const members of grpMap.values()) {
+      if (members.length === 1) { result.push(members[0]); continue; }
+      const beds = members.map(r => r.bedText).filter(Boolean).join(' or ');
+      const allPhotos = [...new Set(members.flatMap(r => r.roomPhotos || []))];
+      result.push({ ...members[0], roomName: baseName, bedText: beds, roomPhotos: allPhotos });
+    }
+  }
+  return result;
+}
+
+// ── Agoda Room Parse ──
+function parseAgodaRooms(data) {
+  const AGODA_COUNTRY_MAP = { 212: 'KR' };
+  const country = AGODA_COUNTRY_MAP[data.countryId] || '';
+  const seen = new Map();
+  for (const room of (data.rooms || [])) {
+    if (seen.has(room.typeId)) continue;
+    const sizeFeature = (room.features || []).find(f => f.type === 'ROOM_SIZE');
+    const bedFeature = (room.features || []).find(f => f.type === 'BEDROOM_LAYOUT');
+    const sizeText = (sizeFeature?.text || '').split('/')[0].trim();
+    const bedText = bedFeature?.text || '';
+    const photos = (room.images || [])
+      .map(img => img.url.replace(/\?.*/, ''))
+      .filter(u => {
+        if (u.includes('bstatic.com')) return false;
+        const m = u.match(/\/hotelImages\/\d+\/(-?\d+)\//);
+        if (m && (m[1] === '-1' || m[1] === '0')) return false;
+        return true;
+      });
+    const priceText = room.offers?.[0]?.price?.final?.text || '';
+    const occupancyAttrs = room.offers?.[0]?.occupancyItems?.[0]?.dataAttributes || {};
+    const maxAdults = parseInt(occupancyAttrs['data-adults']) || 2;
+    const occupancy = maxAdults + ' adults';
+    seen.set(room.typeId, {
+      roomName: room.name,
+      bedText,
+      sizeText,
+      roomPhotos: photos,
+      country,
+      priceText,
+      occupancy,
+      maxAdults,
+      extraBedDesc: "Extra beds and cribs are unavailable for this room type",
+    });
+  }
+  return [...seen.values()];
+}
+
+async function scanAgodaTab(tabId) {
+  for (let i = 0; i < 6; i++) {
+    const res = await exec(tabId, () => window.__teraAgodaRooms, [], "MAIN");
+    const data = res?.[0]?.result;
+    if (data?.rooms?.length) {
+      const rooms = parseAgodaRooms(data);
+      const photoRes = await exec(tabId, () => window.__teraAgodaHotelPhotos || [], [], "MAIN");
+      const hotelPhotos = photoRes?.[0]?.result || [];
+      return { rooms, hotelPhotos };
+    }
+    await sleep(500);
+  }
+  setStatus(currentLang === 'kr' ? 'Agoda 페이지를 새로고침 후 다시 스캔해주세요.' : 'Please reload the Agoda page and scan again.', 'error');
+  return null;
+}
+
 // ── Room Scan ──
 async function scanTab(tabId) {
   await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: () => { window.__scanRoomsLoaded = false; } });
@@ -391,20 +511,26 @@ async function teraFillOneRoom(tabId, room, roomType) {
   }
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-roomtype"]')?.click());
-  await sleep(1200);
+  await sleep(200);
 
   // 옵션이 실제로 뜰 때까지 polling
   for (let i = 0; i < 16; i++) {
     const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span').length);
     if ((r?.[0]?.result || 0) > 0) break;
-    await sleep(300);
+    await sleep(150);
   }
 
   await exec(tabId, (type) => {
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span'))
       .find(s => s.textContent.trim() === type)?.closest('div').click();
   }, [roomType]);
-  await sleep(1500);
+
+  // Room Description 필드가 뜰 때까지 polling
+  for (let i = 0; i < 16; i++) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid="textfield-rs-room-description"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
 
   // Room Description (extra bed/crib 안내문, Room Type 다음 순서)
   await exec(tabId, (desc) => {
@@ -415,7 +541,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }, [room.extraBedDesc || "Extra beds and cribs are unavailable for this room type"]);
-  await sleep(500);
+  await sleep(200);
 
   await exec(tabId, () => {
     const input = document.querySelector('[data-testid="input-rs-room-numofrooms"]');
@@ -612,7 +738,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
-  }, [room.occupancy || 2]);
+  }, [room.maxAdults || 2]);
   await sleep(500);
 
   await exec(tabId, () => {
@@ -678,7 +804,10 @@ async function classifyRoomPhotos(tabId) {
         else if (BEDROOM_CONTEXT.some(k => lower.includes(k)))  scores.Bedroom  += score * 1.0;
       }
       if (scores.Bathroom === 0 && scores.Bedroom === 0) return 'Others';
-      return scores.Bathroom > scores.Bedroom ? 'Bathroom' : 'Bedroom';
+      if (scores.Bathroom > scores.Bedroom * 1.8) return 'Bathroom';
+      if (scores.Bedroom > 0) return 'Bedroom';
+      if (scores.Bathroom > 0.08) return 'Bathroom';
+      return 'Others';
     };
 
     try {
@@ -1216,19 +1345,24 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url?.includes("trip.com/hotels")) {
+    const isAgoda = tab.url?.includes("agoda.com");
+    const isTrip = tab.url?.includes("trip.com/hotels");
+    if (!isTrip && !isAgoda) {
       setStatus(t().notTripPage, "error");
       btn.disabled = false;
       return;
     }
 
     setStatus(t().scan1);
-    const result = await scanTab(tab.id);
+    const result = isAgoda ? await scanAgodaTab(tab.id) : await scanTab(tab.id);
+    if (!result) { btn.disabled = false; return; }
     const allRooms = new Map();
     (result.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
 
-    const finalRooms = [...allRooms.values()];
+    let finalRooms = [...allRooms.values()];
     if (finalRooms.length === 0) { setStatus(t().noRooms, "error"); btn.disabled = false; return; }
+
+    if (isAgoda) finalRooms = await processBedGroups(finalRooms);
 
     roomData = finalRooms;
     hotelPhotos = result.hotelPhotos || [];
@@ -1268,7 +1402,99 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url?.includes("trip.com")) { setExtractStatus(t().extractNotTrip, "error"); return; }
+    const isAgodaExtract = tab.url?.includes("agoda.com");
+    const isTripExtract  = tab.url?.includes("trip.com");
+    if (!isTripExtract && !isAgodaExtract) { setExtractStatus(t().extractNotTrip, "error"); return; }
+
+    if (isAgodaExtract) {
+      const agodaRes = await exec(tab.id, () => window.__teraAgodaRooms, [], "MAIN");
+      const agoda = agodaRes?.[0]?.result;
+      if (!agoda?.propertyName) { setExtractStatus('Agoda 페이지를 새로고침 후 다시 시도해주세요.', "error"); return; }
+
+      await exec(tab.id, (personName) => {
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzJw0zPaNbeh3dpygO393HkmQVvlpCXkVpIcySbxGqFBqLyyWQiCHWRCI2C8KUfyKAm/exec";
+        const agoda = window.__teraAgodaRooms;
+        const text = document.body?.innerText || "";
+
+        const hotelName = agoda?.propertyName || document.querySelector('h1')?.innerText?.trim() || '';
+
+        // Check-in/out from benefits in room-grid
+        let checkIn = '14:00', checkOut = '12:00';
+        outer: for (const room of (agoda?.rooms || [])) {
+          for (const offer of (room.offers || [])) {
+            for (const b of (offer.benefits || [])) {
+              const cin = b.text?.match(/Check-in\s+(\d{1,2}:\d{2})/i);
+              const cout = b.text?.match(/Check-out\s+(\d{1,2}:\d{2})/i);
+              if (cin) checkIn = cin[1];
+              if (cout) checkOut = cout[1];
+              if (cin || cout) break outer;
+            }
+          }
+        }
+        // fallback: DOM text
+        if (checkIn === '14:00') { const m = text.match(/check.?in[:\s]+(\d{1,2}:\d{2})/i); if (m) checkIn = m[1]; }
+        if (checkOut === '12:00') { const m = text.match(/check.?out[:\s]+(\d{1,2}:\d{2})/i); if (m) checkOut = m[1]; }
+
+        // Currency from price text symbol
+        const priceText = agoda?.rooms?.[0]?.offers?.[0]?.price?.final?.text || '';
+        const symbolMap = [['NT$','TWD'],['HK$','HKD'],['S$','SGD'],['RM','MYR'],['Rp','IDR'],['₱','PHP'],['₫','VND'],['฿','THB'],['¥','JPY'],['₩','KRW']];
+        let currency = 'KRW';
+        for (const [sym, cur] of symbolMap) { if (priceText.includes(sym)) { currency = cur; break; } }
+
+        // Address
+        const addrEl = document.querySelector('[data-element-name="hotel-header-location"], [data-selenium="hotel-address"], [class*="hotel-header"] [class*="address"]');
+        const address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+
+        // GPS from scripts
+        let lat = '', lng = '';
+        for (const s of document.querySelectorAll('script:not([src])')) {
+          const c = s.textContent.match(/"latitude"\s*:\s*([\d.-]+)[^}]{1,100}"longitude"\s*:\s*([\d.-]+)/);
+          if (c) { lat = parseFloat(c[1]).toFixed(4); lng = parseFloat(c[2]).toFixed(4); break; }
+        }
+        if (!lat) {
+          const c = [...document.querySelectorAll('script:not([src])')].map(s => s.textContent).join('').match(/lat[^:\d-]*([\d.-]+)[^:lat\d-]{1,30}lo?ng?[^:\d-]*([\d.-]+)/i);
+          if (c) { lat = parseFloat(c[1]).toFixed(4); lng = parseFloat(c[2]).toFixed(4); }
+        }
+
+        // Star rating
+        const starEl = document.querySelector('[data-element-name="hotel-header-stars"], [class*="star-rating"]');
+        const starRating = String(starEl ? (starEl.querySelectorAll('[class*="star--active"], [class*="filled"], svg').length || 0) : 0);
+
+        // Accommodation type
+        const n = hotelName.toLowerCase();
+        let accommodationType = 'HOTEL';
+        if (/resort/.test(n)) accommodationType = 'RESORT';
+        else if (/hostel|backpacker/.test(n)) accommodationType = 'HOSTEL_BACKPACKER_ACCOMMODATION';
+        else if (/villa/.test(n)) accommodationType = 'VILLA';
+        else if (/apartment|apart/.test(n)) accommodationType = 'APARTMENT';
+        else if (/capsule/.test(n)) accommodationType = 'CAPSULE_HOTEL';
+        else if (/guesthouse|guest house/.test(n)) accommodationType = 'GUESTHOUSE';
+
+        // Facilities from page text
+        const fmap = [
+          {keywords:['balcony','terrace'],code:'BALCONY_TERRACE'},{keywords:['connecting room','interconnecting'],code:'INTERCONNECTING_ROOMS_AVAILABLE'},
+          {keywords:['private pool'],code:'PRIVATE_POOL'},{keywords:['shower'],code:'SHOWER'},{keywords:['bathrobes','bathrobe'],code:'BATHROBES'},
+          {keywords:['bathtub'],code:'BATHTUB'},{keywords:['hot water','heated water'],code:'HEATED_WATER'},{keywords:['air conditioning'],code:'AIR_CONDITIONING'},
+          {keywords:['hair dryer'],code:'HAIR_DRYER'},{keywords:['desk'],code:'DESK'},
+          {keywords:['free wi-fi','wi-fi','wifi','free internet'],code:'INTERNET_ACCESS_WIFI_COMPLIMENTARY'},
+          {keywords:['microwave'],code:'MICROWAVE'},{keywords:['washing machine'],code:'WASHING_MACHINE'},{keywords:['iron','ironing'],code:'IRONING_FACILITIES'},
+          {keywords:['television','tv'],code:'TELEVISION'},{keywords:['refrigerator','fridge'],code:'REFRIGERATOR'},
+          {keywords:['mini bar','minibar'],code:'MINI_BAR'},{keywords:['kettle','coffee','tea'],code:'COFFEE_TEA_MAKER'},
+          {keywords:['bottled water'],code:'COMPLIMENTARY_BOTTLED_WATER'}
+        ];
+        const ft = text.toLowerCase();
+        const hotelFacilities = fmap.filter(f => f.keywords.some(k => ft.includes(k))).map(f => f.code).join(', ');
+
+        fetch(HOTEL_WEB_APP_URL, {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ type: 'hotel', hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities, personName })
+        });
+      }, [selectedPerson || 'Others'], 'MAIN');
+
+      setExtractStatus(t().extractDone(agoda.propertyName), "success");
+      await openOrFocusTab("https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/*", HOTEL_SHEET_URL);
+      return;
+    }
 
     const results = await exec(tab.id, extractScript);
     const data = results?.[0]?.result;

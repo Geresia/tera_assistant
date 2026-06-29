@@ -312,6 +312,18 @@
     <div id="status" class="status"></div>
     <div id="teraStatus" class="status"></div>
 
+    <!-- Bed Merge Question -->
+    <div id="bedMergeBox" style="display:none; margin-top:12px; border:0.5px solid #0071e3; border-radius:10px; padding:14px;">
+      <div style="font-size:10px;font-weight:600;color:#aeaeb2;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;">Multiple Bed Types</div>
+      <div style="font-size:13px;font-weight:600;color:#1d1d1f;margin-bottom:2px;" id="bedMergeGroupName"></div>
+      <div style="font-size:11px;color:#86868b;margin-bottom:10px;">같은 Room 번호끼리 합쳐짐 · Separate = 개별 방 유지</div>
+      <div id="bedMergeList" style="margin-bottom:12px;"></div>
+      <div class="btn-row">
+        <button class="btn-primary" id="bedMergeApply">Apply</button>
+        <button class="btn-gray" id="bedMergeSkip">All Separate</button>
+      </div>
+    </div>
+
     <!-- Room Checkbox List -->
     <div id="roomList">
       <div class="room-item" id="checkAllRow">

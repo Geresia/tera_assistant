@@ -21,7 +21,17 @@
     "https://tera.traveloka.com/*",
     "https://*.traveloka.com/*",
     "https://tfhub.dev/*",
-    "https://storage.googleapis.com/*"
+    "https://storage.googleapis.com/*",
+    "https://www.agoda.com/*",
+    "https://*.agoda.net/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.agoda.com/*"],
+      "js": ["agoda_main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
   ],
   "action": {
     "default_icon": {
