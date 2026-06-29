@@ -1807,13 +1807,13 @@ async function uploadRoomPhotos(tabId, base64List) {
         dt.items.add(file);
         for (const type of ['dragenter', 'dragover', 'drop']) {
           dropTarget.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
-          await delay(150);
+          await delay(80);
         }
 
         // 프리뷰 모달(slick-slider)이 뜰 때까지 대기 (최대 5초)
         let previewBtn = null;
-        for (let i = 0; i < 20; i++) {
-          await delay(250);
+        for (let i = 0; i < 50; i++) {
+          await delay(100);
           previewBtn = document.querySelector('[data-testid="button-upload-preview-photo"]');
           if (previewBtn && previewBtn.offsetParent) break;
           previewBtn = null;
@@ -1823,16 +1823,16 @@ async function uploadRoomPhotos(tabId, base64List) {
         previewBtn.click();
 
         // 프리뷰 모달이 DOM에서 완전히 사라질 때까지 대기 (최대 8초)
-        for (let i = 0; i < 32; i++) {
-          await delay(250);
+        for (let i = 0; i < 80; i++) {
+          await delay(100);
           if (!document.querySelector('[data-testid="button-upload-preview-photo"]')) break;
         }
 
         // 모달 close 애니메이션 + slick-slider 정리 시간 확보
-        await delay(600);
+        await delay(350);
       } catch (e) { /* 한 장 실패해도 계속 */ }
     }, [b64], "MAIN");
-    await sleep(300); // popup-content 핸드오프 최소 간격
+    await sleep(150); // popup-content 핸드오프 최소 간격
   }
 }
 
@@ -1866,7 +1866,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
     return false;
   }, [], "MAIN");
   if (!clicked?.[0]?.result) throw new Error('Manage Photos button not found');
-  await sleep(1200);
+  await sleep(700);
 
   // 2) Click "Add more photos" button
   const clicked2 = await exec(tabId, () => {
@@ -1875,7 +1875,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
     return false;
   }, [], "MAIN");
   if (!clicked2?.[0]?.result) throw new Error('Add more photos button not found');
-  await sleep(800);
+  await sleep(700);
 
   // 3) Upload each photo; retry on 401
   let i = 0;
@@ -1948,7 +1948,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
           const target = dropzone.closest('div') || dropzone;
           for (const type of ['dragenter', 'dragover', 'drop']) {
             target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
-            await delay(150);
+            await delay(80);
           }
         } else {
           // Fallback: inject into hidden file input
@@ -1963,8 +1963,8 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
 
         // Wait for "Upload" button (orange) — up to 60s for slow networks
         let uploadBtn = null;
-        for (let k = 0; k < 240; k++) {
-          await delay(250);
+        for (let k = 0; k < 500; k++) {
+          await delay(120);
           uploadBtn = Array.from(document.querySelectorAll('button span'))
             .find(s => s.textContent.trim() === 'Upload')?.closest('button');
           if (uploadBtn && uploadBtn.offsetParent) break;
@@ -1973,11 +1973,11 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
         if (!uploadBtn) return { ok: false, reason: 'no-upload-btn' };
         uploadBtn.click();
         // Wait for Upload button to disappear (upload complete) — up to 30s
-        for (let k = 0; k < 120; k++) {
-          await delay(250);
+        for (let k = 0; k < 250; k++) {
+          await delay(120);
           if (!Array.from(document.querySelectorAll('button span')).find(s => s.textContent.trim() === 'Upload')) break;
         }
-        await delay(600);
+        await delay(350);
         return { ok: true };
       } catch (e) {
         console.error('[hotel upload] error:', e.message);
@@ -1987,8 +1987,8 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
 
     // Wait for server response code (poll up to 30s)
     let code = null;
-    for (let w = 0; w < 60; w++) {
-      await sleep(500);
+    for (let w = 0; w < 150; w++) {
+      await sleep(200);
       const codeRes = await exec(tabId, () => window.__teraUploadCode, [], "MAIN");
       code = codeRes?.[0]?.result;
       if (code !== null && code !== undefined) break;
@@ -2019,12 +2019,12 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
       continue; // retry same i
     }
 
-    await sleep(1500);
+    await sleep(500);
     i++;
   }
 
   // After all uploads: select the last N photos and click "Add the selected photos"
-  await sleep(1500);
+  await sleep(800);
   setTeraStatus(`Selecting last ${base64List.length} photos...`);
 
   await exec(tabId, (count) => {
@@ -2032,7 +2032,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
     labels.slice(-count).forEach(lbl => lbl.click());
   }, [base64List.length], "MAIN");
 
-  await sleep(800);
+  await sleep(500);
 
   await exec(tabId, () => {
     const btn = Array.from(document.querySelectorAll('button span'))
@@ -2099,5 +2099,3 @@ document.getElementById("photoZipBtn").addEventListener("click", async () => {
   }
   btn.disabled = false;
 });
-
-    
