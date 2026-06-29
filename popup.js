@@ -1250,7 +1250,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     roomList.style.display = "block";
     document.getElementById("selectFillBtn").style.display = "block";
     document.getElementById("photoZipBtn").style.display = "block";
-    if (hotelPhotos.length > 0) document.getElementById("hotelPhotoBtn").style.display = "block";
+    document.getElementById("hotelPhotoBtn").style.display = "block";
   } catch (err) {
     console.error("[Tera] 에러:", err);
     setStatus("Error: " + err.message, "error");
