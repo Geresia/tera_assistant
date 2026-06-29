@@ -79,9 +79,7 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ---
 
 ## Version History
-- **5.3** - Added hotel photo upload to Tera (hotel-photo page). AI-based room photo classification using MobileNet. 401 error handling with auto-retry countdown and Retry Now button. Hotel photo limit of 10. Dead code cleanup and version fix.
-- **5.0** - Rebranded to Tera Assistant. Merged Hotel Info Extractor into Room Scraper. Added Hotel Info section with Extract and Sheet buttons. UI redesigned with clean flat layout and KR/EN language toggle. Switched to Side Panel. Added hotel-level facility extraction, local name, address, check-in/out, parking, breakfast, airport transfer, voltage auto-fill support.
+- **5.3** - Rebranded to Tera Assistant. Merged Hotel Info Extractor into Room Scraper. Added Hotel Info section with Extract and Sheet buttons. UI redesigned with clean flat layout and KR/EN language toggle. Switched to Side Panel. Added hotel-level facility extraction, local name, address, check-in/out, parking, breakfast, airport transfer, voltage auto-fill support. Added hotel photo upload to Tera (hotel-photo page). AI-based room photo classification using MobileNet. 401 error handling with auto-retry countdown and Retry Now button. Hotel photo limit of 10.
 - **4.0** - Migrated room scraping and hotel photos to Trip.com API (`physicRoomMap` + `getHotelDetailAggregate`). Removed DOM-based scraping. Now works on all regional Trip.com domains.
-- **3.3** - Added language toggle (KR/EN) and auto expand hidden room types.
-- **3.0** - Added ZIP photo download feature.
+- **3.0** - Added ZIP photo download feature. Added language toggle (KR/EN) and auto expand hidden room types.
 - **2.0** - Migrated to Chrome Extension from bookmarklet.
