@@ -6,7 +6,7 @@
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 ![Last Commit](https://img.shields.io/github/last-commit/Geresia/tera_assistant)
 
-# Tera Assistant - Chrome Extension
+# Tera Assistant
 A Chrome Extension that extracts hotel and room data from Trip.com and automatically fills it into tera.traveloka.com, with photo upload and ZIP download support.
 
 ---
