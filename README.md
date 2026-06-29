@@ -9,7 +9,7 @@ A Chrome Extension that extracts hotel and room data from Trip.com and automatic
 
 ## Installation (First Time)
 
-**Step 1 — Download files**
+**Step 1 - Download files**
 
 Open PowerShell and paste this one line:
 
@@ -19,7 +19,7 @@ $d="$env:USERPROFILE\Desktop\tera_assistant"; mkdir $d -Force; iwr "https://raw.
 
 This creates a `tera_assistant` folder on your Desktop and downloads all extension files from GitHub.
 
-**Step 2 — Load in Chrome**
+**Step 2 - Load in Chrome**
 
 1. Go to `chrome://extensions`
 2. Enable **Developer mode** (top right toggle)
@@ -53,12 +53,12 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ### Create New Room
 1. Enter the **Hotel Name** (used for photo ZIP folder name)
 2. Select **Assigned To**
-3. Click **Scan** — scrapes all room data from Trip.com
+3. Click **Scan** - scrapes all room data from Trip.com
 4. Select the rooms you want to fill (checkboxes appear)
-5. Click **Fill** — auto-fills each room on Tera one by one
+5. Click **Fill** - auto-fills each room on Tera one by one
    - After each room: review, then click **Continue**
-6. Click **IMAGE** — downloads all room photos as a ZIP file
-7. Click **Hotel Photos Insert** — uploads hotel photos directly to Tera's hotel-photo page (navigate there first)
+6. Click **IMAGE** - downloads all room photos as a ZIP file
+7. Click **Hotel Photos Insert** - uploads hotel photos directly to Tera's hotel-photo page (navigate there first)
 
 ### Edit Room
 | Button | Description |
@@ -69,13 +69,13 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ---
 
 ## File Structure
-- `manifest.json` — Extension configuration
-- `popup.html` / `popup.js` — Side Panel UI and logic
-- `content.js` — Scrapes room and hotel photo data from Trip.com
-- `background.js` — Opens Side Panel on extension icon click
-- `Tera_Update.bat` / `update.ps1` — One-click update script
-- `jszip.min.js` — ZIP file library
-- `tf.min.js` / `mobilenet.min.js` / `imagenet_labels.json` — AI photo classification (MobileNet)
+- `manifest.json` - Extension configuration
+- `popup.html` / `popup.js` - Side Panel UI and logic
+- `content.js` - Scrapes room and hotel photo data from Trip.com
+- `background.js` - Opens Side Panel on extension icon click
+- `Tera_Update.bat` / `update.ps1` - One-click update script
+- `jszip.min.js` - ZIP file library
+- `tf.min.js` / `mobilenet.min.js` / `imagenet_labels.json` - AI photo classification (MobileNet)
 
 ---
 
