@@ -1482,10 +1482,10 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
           const addrEl = document.querySelector('[data-selenium="hotel-address"], [data-element-name="hotel-header-location"]');
           address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
         }
-        // fallback star: data-selenium attribute
+        // fallback star: "3.5 stars out of 5" in page text
         if (starRating === '0') {
-          const starEl = document.querySelector('[data-selenium="hotel-star-rating"], [data-element-name="hotel-header-stars"]');
-          if (starEl) starRating = String(starEl.querySelectorAll('svg, i, span[class*="star"]').length || 0);
+          const m = text.match(/(\d+\.?\d*)\s*stars?\s*out\s*of\s*5/i);
+          if (m) starRating = m[1];
         }
 
         // Accommodation type
