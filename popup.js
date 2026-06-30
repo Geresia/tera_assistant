@@ -209,23 +209,72 @@ const HOTEL_FACILITY_MAP = [
   { codes: [40, 177, 344, 347, 350, 351, 353, 371, 372, 479, 513], teraValues: ["HAS_24_HOUR_SECURITY"] },
   { codes: [739], teraValues: ["MULTILINGUAL_STAFF"] },
   { codes: [777], teraValues: ["SPECIAL_DIETARY_OPTIONS"] },
+  // ── Keyword-based (Agoda text matching + Trip.com desc fallback) ──
+  { keywords: ["wi-fi", "wifi", "free internet", "wireless internet"], teraValues: ["WIFI_PUBLIC_AREA", "WIFI_FREE"] },
+  { keywords: ["car park", "parking"], teraValues: ["CARPARK"] },
+  { keywords: ["valet parking"], teraValues: ["VALET_PARKING"] },
+  { keywords: ["airport transfer", "airport shuttle", "airport pickup", "airport drop"], teraValues: ["AIRPORT_TRANSFER"] },
+  { keywords: ["area shuttle", "shuttle service"], teraValues: ["AREA_SHUTTLE"] },
+  { keywords: ["car hire", "car rental"], teraValues: ["CAR_HIRE"] },
+  { keywords: ["bicycle hire", "bike rental", "bicycle rental"], teraValues: ["BICYCLE_HIRE_SERVICE"] },
+  { keywords: ["room service"], teraValues: ["ROOM_SERVICE", "HAS_24_HOUR_ROOM_SERVICE"] },
+  { keywords: ["restaurant", "dining room"], teraValues: ["RESTAURANT", "RESTAURANT_FOR_BREAKFAST", "RESTAURANT_FOR_LUNCH", "RESTAURANT_FOR_DINNER"] },
+  { keywords: ["cafe", "coffee shop", "coffee lounge"], teraValues: ["CAFE", "COFFEE_SHOP"] },
+  { keywords: ["bar", "lounge bar", "cocktail lounge"], teraValues: ["BAR"] },
+  { keywords: ["snack bar"], teraValues: ["SNACK_BAR"] },
+  { keywords: ["gift shop", "souvenir shop"], teraValues: ["GIFT_SHOP"] },
+  { keywords: ["conference room", "meeting room", "meeting facilities", "seminar room", "banquet hall"], teraValues: ["CONFERENCE_ROOM", "MEETING_FACILITIES"] },
+  { keywords: ["wedding"], teraValues: ["WEDDING_SERVICE"] },
+  { keywords: ["business center", "business centre"], teraValues: ["BUSINESS_CENTER"] },
+  { keywords: ["concierge"], teraValues: ["CONCIERGE"] },
+  { keywords: ["safety deposit", "safe deposit", "in-room safe", "safety box"], teraValues: ["SAFETY_DEPOSIT_BOX"] },
+  { keywords: ["porter service", "bellboy", "bellhop", "bellman"], teraValues: ["PORTER", "BELLBOY_SERVICE"] },
+  { keywords: ["luggage storage", "baggage storage"], teraValues: ["LUGGAGE_STORAGE"] },
+  { keywords: ["24-hour front desk", "24 hour front desk", "front desk 24", "reception 24"], teraValues: ["FRONT_DESK", "HAS_24_HOUR_FRONT_DESK"] },
+  { keywords: ["currency exchange", "money exchange", "foreign exchange"], teraValues: ["CURRENCY_EXCHANGE"] },
+  { keywords: ["express check-in", "express check-out", "express checkout"], teraValues: ["EXPRESS_CHECK_IN", "EXPRESS_CHECK_OUT"] },
+  { keywords: ["tour desk", "tours", "sightseeing"], teraValues: ["TOURS"] },
+  { keywords: ["shopping", "retail"], teraValues: ["SHOPS"] },
+  { keywords: ["atm", "banking", "cash machine"], teraValues: ["ATM_OR_BANKING"] },
+  { keywords: ["elevator", "lift"], teraValues: ["ELEVATOR"] },
+  { keywords: ["non-smoking", "smoke-free", "smoke free", "no smoking"], teraValues: ["SMOKING_FREE", "NON_SMOKING_ROOM"] },
+  { keywords: ["smoking area", "smoking room"], teraValues: ["SMOKING_AREA"] },
+  { keywords: ["library", "reading room"], teraValues: ["LIBRARY"] },
+  { keywords: ["garden", "terrace garden"], teraValues: ["GARDEN"] },
+  { keywords: ["fitness center", "fitness room", "fitness centre", "gym", "gymnasium", "exercise room"], teraValues: ["FITNESS_CENTER", "FITNESS"] },
+  { keywords: ["spa"], teraValues: ["SPA"] },
+  { keywords: ["massage"], teraValues: ["MASSAGE"] },
+  { keywords: ["sauna"], teraValues: ["SAUNA"] },
+  { keywords: ["hair salon", "beauty salon", "hairdresser"], teraValues: ["HAIR_SALON", "BEAUTY_SALON"] },
+  { keywords: ["table tennis", "ping pong"], teraValues: ["TABLE_TENNIS"] },
+  { keywords: ["tennis court", "tennis"], teraValues: ["TENNIS", "OUTDOOR_TENNIS_COURT"] },
+  { keywords: ["bowling"], teraValues: ["BOWLING_ALLEY"] },
+  { keywords: ["karaoke"], teraValues: ["KARAOKE"] },
+  { keywords: ["casino"], teraValues: ["CASINO"] },
+  { keywords: ["laundry service", "laundromat", "dry cleaning"], teraValues: ["LAUNDRY_SERVICE"] },
+  { keywords: ["babysitting", "childcare", "child care"], teraValues: ["BABYSITTING", "SUPERVISED_CHILDCARE"] },
+  { keywords: ["children's play area", "children play area", "kids play area", "playground"], teraValues: ["CHILDREN_PLAY_AREA"] },
+  { keywords: ["kids club", "children's club", "children club"], teraValues: ["CHILDREN_CLUB"] },
+  { keywords: ["wheelchair", "accessible facilities", "disability access"], teraValues: ["WHEELCHAIR_ACCESSIBLE"] },
+  { keywords: ["24-hour security", "security guard", "security service"], teraValues: ["HAS_24_HOUR_SECURITY"] },
+  { keywords: ["multilingual staff", "multiple languages"], teraValues: ["MULTILINGUAL_STAFF"] },
   { keywords: ["rooftop pool", "infinity pool", "outdoor pool", "outdoor swimming", "saltwater pool", "pool with view"], teraValues: ["OUTDOOR_POOL", "POOL"] },
   { keywords: ["indoor pool", "indoor swimming"], teraValues: ["INDOOR_POOL", "POOL"] },
   { keywords: ["heated pool"], teraValues: ["OUTDOOR_HEATED_POOL", "POOL"] },
   { keywords: ["children pool", "kids pool", "children's pool"], teraValues: ["CHILDREN_POOL"] },
   { keywords: ["pool bar", "swim up bar", "swimup"], teraValues: ["SWIMUP_BAR"] },
   { keywords: ["hot tub", "jacuzzi"], teraValues: ["HOT_TUB", "SPA_TUB"] },
-  { keywords: ["hot spring"], teraValues: ["HOT_TUB"] },
+  { keywords: ["hot spring", "onsen", "thermal bath"], teraValues: ["HOT_TUB"] },
   { keywords: ["steam room", "steamroom"], teraValues: ["STEAMROOM", "STEAM_BATH"] },
   { keywords: ["private beach"], teraValues: ["PRIVATE_BEACH"] },
-  { keywords: ["public beach"], teraValues: ["PRIVATE_BEACH_NEARBY"] },
+  { keywords: ["public beach", "beach access"], teraValues: ["PRIVATE_BEACH_NEARBY"] },
   { keywords: ["barbecue", "bbq"], teraValues: ["BARBECUE_GRILL"] },
   { keywords: ["water park"], teraValues: ["WATER_PARK_ACCESS"] },
   { keywords: ["waterslide"], teraValues: ["WATERSLIDE"] },
-  { keywords: ["pets allowed", "pets welcome"], teraValues: ["PETS_ALLOWED"] },
-  { keywords: ["golf course"], teraValues: ["GOLF_COURSE"] },
+  { keywords: ["pets allowed", "pets welcome", "pet friendly"], teraValues: ["PETS_ALLOWED"] },
+  { keywords: ["golf course", "golf"], teraValues: ["GOLF_COURSE"] },
   { keywords: ["beach bar"], teraValues: ["BEACH_BAR"] },
-  { keywords: ["nightclub"], teraValues: ["NIGHTCLUB"] },
+  { keywords: ["nightclub", "night club"], teraValues: ["NIGHTCLUB"] },
   { keywords: ["billiard", "snooker"], teraValues: ["BILLIARDS"] },
   { keywords: ["ski"], teraValues: ["SKI"] },
   { keywords: ["marina"], teraValues: ["MARINA"] },
@@ -1253,14 +1302,12 @@ async function runHotelAutofill(tabId) {
     await sleep(2500);
     await dismissLeaveModalIfPresent(tabId);
 
-    // Facilities 탭 — Agoda는 _agodaTeraFacilities(직접 코드), Trip.com은 _tripFacilities(코드 매핑)
-    const teraValues = currentHotelData._agodaTeraFacilities?.length > 0
-      ? currentHotelData._agodaTeraFacilities
-      : getTeraFacilities(currentHotelData._tripFacilities || []);
-    if (teraValues.length > 0) {
+    // Facilities 탭
+    if (currentHotelData._tripFacilities?.length > 0) {
       setExtractStatus(t().hotelAutofillFacilities);
       await clickSidebarTab(tabId, "Facilities");
       await sleep(1500);
+      const teraValues = getTeraFacilities(currentHotelData._tripFacilities);
       await exec(tabId, hotelFacilitiesScript, [teraValues]);
       await sleep(2500);
       await dismissLeaveModalIfPresent(tabId);
@@ -1727,81 +1774,18 @@ const agodaExtractForDetail = () => {
   data.airport_transfer = /airport\s*(?:pickup|shuttle|transfer)/i.test(text) ? 'Yes' : 'No';
   data.airport_transfer_fee = '-';
 
-  // Facilities: Agoda 페이지 텍스트 키워드 → Tera 코드 직접 매핑
-  const agodaFacMap = [
-    {kw:['wi-fi','wifi','wireless internet','free internet'],codes:['WIFI_PUBLIC_AREA','WIFI_FREE']},
-    {kw:['car park','parking','valet'],codes:['CARPARK']},
-    {kw:['valet parking'],codes:['VALET_PARKING']},
-    {kw:['room service'],codes:['ROOM_SERVICE','HAS_24_HOUR_ROOM_SERVICE']},
-    {kw:['laundry','laundromat','dry cleaning'],codes:['LAUNDRY_SERVICE']},
-    {kw:['restaurant','dining'],codes:['RESTAURANT','RESTAURANT_FOR_BREAKFAST','RESTAURANT_FOR_LUNCH','RESTAURANT_FOR_DINNER']},
-    {kw:['bar','lounge bar','cocktail lounge'],codes:['BAR']},
-    {kw:['24-hour front desk','24 hour front desk','front desk 24','front desk [24-hour]','reception 24'],codes:['FRONT_DESK','HAS_24_HOUR_FRONT_DESK']},
-    {kw:['safety deposit','safe deposit','in-room safe','safety box'],codes:['SAFETY_DEPOSIT_BOX']},
-    {kw:['luggage storage','baggage storage','luggage room'],codes:['LUGGAGE_STORAGE']},
-    {kw:['atm','banking','cash machine'],codes:['ATM_OR_BANKING']},
-    {kw:['fitness center','fitness room','gym','gymnasium','exercise room'],codes:['FITNESS_CENTER','FITNESS']},
-    {kw:['non-smoking','smoke-free','smoke free','non smoking','no smoking'],codes:['NON_SMOKING_ROOM','SMOKING_FREE']},
-    {kw:['smoking area','smoking room'],codes:['SMOKING_AREA']},
-    {kw:['elevator','lift'],codes:['ELEVATOR']},
-    {kw:['concierge'],codes:['CONCIERGE']},
-    {kw:['business center','business centre','business services'],codes:['BUSINESS_CENTER']},
-    {kw:['conference','meeting room','meeting facilities','seminar','banquet'],codes:['MEETING_FACILITIES','CONFERENCE_ROOM']},
-    {kw:['airport transfer','airport shuttle','airport pickup','airport drop'],codes:['AIRPORT_TRANSFER','TRANSFER_SERVICE']},
-    {kw:['babysitting','childcare','child care'],codes:['BABYSITTING']},
-    {kw:["children's club","kids club","children club","kids play area","children play"],codes:['CHILDREN_CLUB','CHILDREN_PLAY_AREA']},
-    {kw:['massage'],codes:['MASSAGE']},
-    {kw:['spa'],codes:['SPA']},
-    {kw:['sauna'],codes:['SAUNA']},
-    {kw:['steam room','steam bath','steamroom'],codes:['STEAMROOM','STEAM_BATH']},
-    {kw:['hot tub','jacuzzi','whirlpool'],codes:['HOT_TUB','SPA_TUB']},
-    {kw:['hot spring','onsen','thermal'],codes:['HOT_TUB']},
-    {kw:['outdoor pool','swimming pool','rooftop pool','infinity pool','saltwater pool'],codes:['OUTDOOR_POOL','POOL']},
-    {kw:['indoor pool','indoor swimming'],codes:['INDOOR_POOL','POOL']},
-    {kw:['heated pool'],codes:['OUTDOOR_HEATED_POOL','POOL']},
-    {kw:["children's pool","kids pool","children pool"],codes:['CHILDREN_POOL']},
-    {kw:['pool bar','swim-up bar','swimup bar'],codes:['SWIMUP_BAR']},
-    {kw:['private beach'],codes:['PRIVATE_BEACH']},
-    {kw:['public beach','beach access'],codes:['PRIVATE_BEACH_NEARBY']},
-    {kw:['beach bar'],codes:['BEACH_BAR']},
-    {kw:['bbq','barbecue','barbeque'],codes:['BARBECUE_GRILL']},
-    {kw:['water park'],codes:['WATER_PARK_ACCESS']},
-    {kw:['waterslide','water slide'],codes:['WATERSLIDE']},
-    {kw:['pets allowed','pets welcome','pet friendly'],codes:['PETS_ALLOWED']},
-    {kw:['golf course','golf'],codes:['GOLF_COURSE']},
-    {kw:['tennis court','tennis'],codes:['TENNIS','OUTDOOR_TENNIS_COURT']},
-    {kw:['nightclub','night club'],codes:['NIGHTCLUB']},
-    {kw:['billiard','snooker','pool table'],codes:['BILLIARDS']},
-    {kw:['ski'],codes:['SKI']},
-    {kw:['marina'],codes:['MARINA']},
-    {kw:['turkish bath','hammam'],codes:['TURKISH_BATH']},
-    {kw:['currency exchange','money exchange','foreign exchange'],codes:['CURRENCY_EXCHANGE']},
-    {kw:['gift shop','souvenir shop','shopping'],codes:['SHOPS','GIFT_SHOP']},
-    {kw:['tours','sightseeing','tour desk'],codes:['TOURS']},
-    {kw:['porter','bellboy','bellhop','bellman'],codes:['PORTER','BELLBOY_SERVICE']},
-    {kw:['air conditioning','air-conditioning','aircon'],codes:['AIR_CONDITIONING']},
-    {kw:['hair salon','beauty salon','hairdresser'],codes:['HAIR_SALON','BEAUTY_SALON']},
-    {kw:['library','reading room'],codes:['LIBRARY']},
-    {kw:['garden','terrace garden'],codes:['GARDEN']},
-    {kw:['casino'],codes:['CASINO']},
-    {kw:['wheelchair','accessible','disability'],codes:['WHEELCHAIR_ACCESSIBLE']},
-    {kw:['table tennis','ping pong'],codes:['TABLE_TENNIS']},
-    {kw:['bicycle','bike rental','bike hire'],codes:['BICYCLE_HIRE_SERVICE']},
-    {kw:['car hire','car rental'],codes:['CAR_HIRE']},
-    {kw:['wedding','wedding service'],codes:['WEDDING_SERVICE']},
-    {kw:['multilingual','multiple languages'],codes:['MULTILINGUAL_STAFF']},
-    {kw:['snack bar','snacks'],codes:['SNACK_BAR']},
-    {kw:['cafe','coffee shop','coffee'],codes:['CAFE','COFFEE_SHOP']},
-    {kw:['area shuttle','shuttle service'],codes:['AREA_SHUTTLE']},
-    {kw:['express check-in','express check-out','express checkout'],codes:['EXPRESS_CHECK_IN','EXPRESS_CHECK_OUT']},
-    {kw:['24-hour security','security'],codes:['HAS_24_HOUR_SECURITY']},
-  ];
-  const lowerText = text.toLowerCase();
-  const agodaFacs = new Set();
-  for (const {kw, codes} of agodaFacMap) {
-    if (kw.some(k => lowerText.includes(k))) codes.forEach(c => agodaFacs.add(c));
+  // Facilities: Agoda amenity 항목 텍스트 수집 → popup.js HOTEL_FACILITY_MAP 키워드 매칭 위임
+  const amenitySet = new Set();
+  const amenityEls = document.querySelectorAll(
+    '[class*="amenit"] li, [class*="facilit"] li, ' +
+    '[data-element-name*="amenity"] li, [data-element-name*="facility"] li, ' +
+    '[data-selenium*="amenity"] li, [data-selenium*="facilit"] li'
+  );
+  for (const el of amenityEls) {
+    const t2 = el.innerText?.trim().toLowerCase();
+    if (t2) amenitySet.add(t2);
   }
-  data._agodaTeraFacilities = [...agodaFacs];
+  data._tripFacilities = [...amenitySet].map(desc => ({ desc }));
 
   return data;
 };
