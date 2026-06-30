@@ -19,7 +19,7 @@ const STRINGS = {
     extracting: "스캔 중...",
     extractDone: (n) => `완료: ${n}`,
     extractFail: "스캔 실패",
-    extractNotTrip: "Trip.com 호텔 페이지에서 실행하세요.",
+    extractNotTrip: "Trip.com 또는 Agoda 호텔 페이지에서 실행하세요.",
     hotelInsertBtn: "Hotel Detail Insert",
     hotelInsertNoData: "먼저 Hotel Scan을 실행하세요.",
     hotelInsertNotTera: "tera.traveloka.com 페이지에서 실행하세요.",
@@ -48,7 +48,7 @@ const STRINGS = {
     extracting: "Extracting...",
     extractDone: (n) => `Done: ${n}`,
     extractFail: "Extraction failed.",
-    extractNotTrip: "Please open a Trip.com hotel page.",
+    extractNotTrip: "Please open a Trip.com or Agoda hotel page.",
     hotelInsertBtn: "Hotel Detail Insert",
     hotelInsertNoData: "Please run Hotel Scan first.",
     hotelInsertNotTera: "Please open tera.traveloka.com first.",
@@ -1630,6 +1630,114 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
   }
 });
 
+// ── Agoda Hotel Detail Extract (runs in page MAIN world) ──
+const agodaExtractForDetail = () => {
+  const agoda = window.__teraAgodaRooms;
+  const text = document.body?.innerText || "";
+  const data = {};
+
+  data.name_en = agoda?.propertyName || document.querySelector('h1')?.innerText?.trim() || '';
+  data.name_local = data.name_en;
+
+  // Check-in/out from room benefits
+  let checkIn = '14:00', checkOut = '12:00';
+  outer: for (const room of (agoda?.rooms || [])) {
+    for (const offer of (room.offers || [])) {
+      for (const b of (offer.benefits || [])) {
+        const cin = b.text?.match(/Check-in\s+(\d{1,2}:\d{2})/i);
+        const cout = b.text?.match(/Check-out\s+(\d{1,2}:\d{2})/i);
+        if (cin) checkIn = cin[1];
+        if (cout) checkOut = cout[1];
+        if (cin || cout) break outer;
+      }
+    }
+  }
+  if (checkIn === '14:00') { const m = text.match(/check.?in[:\s]+(\d{1,2}:\d{2})/i); if (m) checkIn = m[1]; }
+  if (checkOut === '12:00') { const m = text.match(/check.?out[:\s]+(\d{1,2}:\d{2})/i); if (m) checkOut = m[1]; }
+  data.checkin_time = checkIn;
+  data.checkout_time = checkOut;
+  data.checkin_end = '23:59';
+  data.checkout_start = '00:00';
+  data.front_desk_hours = "Yes";
+
+  // JSON-LD → address, postal_code, country
+  let address = '', postalCode = '', countryCode = '';
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const json = JSON.parse(s.textContent);
+      const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+      const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+      if (hotel?.address) {
+        const a = hotel.address;
+        if (typeof a === 'string') {
+          address = a;
+        } else {
+          const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+          address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+          postalCode = a.postalCode || '';
+          const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
+          countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
+        }
+        break;
+      }
+    } catch(e) {}
+  }
+  if (!address) {
+    const addrEl = document.querySelector('[data-selenium="hotel-address"], [data-element-name="hotel-header-location"]');
+    address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+  }
+  data.address = address;
+  data.postal_code = postalCode;
+
+  // Voltage by country code
+  const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
+  data.voltage = voltMap[countryCode] || '';
+
+  // Property details from page text
+  const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
+  data.built_year = builtM?.[1] || '';
+  const renM = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
+  data.renovated_year = renM?.[1] || data.built_year || '';
+  const roomM = text.match(/(\d+)\s*(?:guest\s*)?rooms?/i);
+  data.room_count = roomM?.[1] || '';
+  const floorM = text.match(/(\d+)\s*floors?/i) || text.match(/(\d+)(?:th|rd|nd|st)\s*floors?/i);
+  data.floor_count = floorM?.[1] || '';
+  const restM = text.match(/(\d+)\s*restaurants?/i);
+  data.restaurant_count = restM?.[1] || '-';
+  const barM = text.match(/(\d+)\s*bars?\b/i);
+  data.bar_count = barM?.[1] || '-';
+
+  // Room service, parking, airport transfer
+  data.room_service = /room\s*service/i.test(text) ? 'Yes' : 'No';
+  if (/free\s*(?:on.?site\s*)?parking|parking\s*\(free\)/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else if (/paid\s*parking|parking\s*(?:charge|fee)|parking\s*\(chargeable\)/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Paid';
+  } else if (/\bparking\b/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else {
+    data.parking = 'No'; data.parking_type = '-';
+  }
+  data.parking_price = '-';
+  data.airport_transfer = /airport\s*(?:pickup|shuttle|transfer)/i.test(text) ? 'Yes' : 'No';
+  data.airport_transfer_fee = '-';
+
+  // Facilities: DOM amenity items + keyword-matched lines from page text
+  const amenitySet = new Set();
+  for (const el of document.querySelectorAll('[class*="amenit"] li, [class*="facilit"] li, [data-element-name*="amenity"] li, [data-element-name*="facility"] li, [data-selenium*="amenity"] li')) {
+    const t2 = el.innerText?.trim().toLowerCase();
+    if (t2) amenitySet.add(t2);
+  }
+  const facilityKw = ['pool','spa','sauna','gym','fitness','beach','casino','golf','tennis','ski','bbq','barbecue','jacuzzi','hot tub','hot spring','waterslide','water park','steam','nightclub','billiard','marina','hammam','turkish'];
+  for (const line of text.split('\n')) {
+    const ll = line.toLowerCase().trim();
+    if (ll && facilityKw.some(k => ll.includes(k))) amenitySet.add(ll);
+  }
+  data._tripFacilities = [...amenitySet].slice(0, 300).map(desc => ({ desc }));
+
+  return data;
+};
+
 // Hotel Detail Insert (Tera Autofill)
 document.getElementById("sheetBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1654,6 +1762,31 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
         (currentLang === 'kr'
           ? `${data.name_en || '호텔'} - 버튼을 한 번 더 눌러서 시작해 주세요.`
           : `${data.name_en || 'Hotel'} - Click one more time to begin.`),
+        "success"
+      );
+    } catch (e) {
+      setExtractStatus("Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  // 지금 탭이 Agoda이면: 추출 → currentHotelData 갱신 → Tera 탭으로 이동
+  if (tab.url?.includes("agoda.com")) {
+    btn.disabled = true;
+    setExtractStatus(t().extracting);
+    try {
+      const results = await exec(tab.id, agodaExtractForDetail, [], "MAIN");
+      const data = results?.[0]?.result;
+      if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
+      currentHotelData = data;
+      setExtractStatus(t().extractDone(data.name_en), "success");
+      await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
+      setExtractStatus(
+        currentLang === 'kr'
+          ? `${data.name_en} - 버튼을 한 번 더 눌러서 시작해 주세요.`
+          : `${data.name_en} - Click one more time to begin.`,
         "success"
       );
     } catch (e) {
