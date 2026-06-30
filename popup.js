@@ -1465,7 +1465,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
                   address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
                 }
               }
-              if (hotel.starRating?.ratingValue) starRating = String(Math.round(hotel.starRating.ratingValue));
+              if (hotel.starRating?.ratingValue) starRating = String(Math.floor(hotel.starRating.ratingValue));
               break;
             }
           } catch(e) {}
@@ -1485,7 +1485,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
         // fallback star: "3.5 stars out of 5" in page text
         if (starRating === '0') {
           const m = text.match(/(\d+\.?\d*)\s*stars?\s*out\s*of\s*5/i);
-          if (m) starRating = m[1];
+          if (m) starRating = String(Math.floor(parseFloat(m[1])));
         }
 
         // Accommodation type
