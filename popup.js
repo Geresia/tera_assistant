@@ -1442,23 +1442,51 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
         for (const [sym, cur] of symbolMap) { if (priceText.includes(sym)) { currency = cur; break; } }
 
         // Address
-        const addrEl = document.querySelector('[data-element-name="hotel-header-location"], [data-selenium="hotel-address"], [class*="hotel-header"] [class*="address"]');
-        const address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
-
-        // GPS from scripts
-        let lat = '', lng = '';
-        for (const s of document.querySelectorAll('script:not([src])')) {
-          const c = s.textContent.match(/"latitude"\s*:\s*([\d.-]+)[^}]{1,100}"longitude"\s*:\s*([\d.-]+)/);
-          if (c) { lat = parseFloat(c[1]).toFixed(4); lng = parseFloat(c[2]).toFixed(4); break; }
+        // JSON-LD (Schema.org) — most reliable source for address, GPS, stars
+        let address = '', lat = '', lng = '', starRating = '0';
+        for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+          try {
+            const json = JSON.parse(s.textContent);
+            // Agoda wraps everything in @graph array
+            const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+            const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+            if (hotel) {
+              if (hotel.geo?.latitude) { lat = parseFloat(hotel.geo.latitude).toFixed(4); lng = parseFloat(hotel.geo.longitude).toFixed(4); }
+              if (!lat && hotel.hasMap) {
+                const m = hotel.hasMap.match(/center=([\d.-]+)[,%2c]+([\d.-]+)/i);
+                if (m) { lat = parseFloat(m[1]).toFixed(4); lng = parseFloat(m[2]).toFixed(4); }
+              }
+              if (hotel.address) {
+                const a = hotel.address;
+                if (typeof a === 'string') {
+                  address = a;
+                } else {
+                  const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+                  address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+                }
+              }
+              if (hotel.starRating?.ratingValue) starRating = String(Math.round(hotel.starRating.ratingValue));
+              break;
+            }
+          } catch(e) {}
         }
+        // fallback GPS: inline script JSON
         if (!lat) {
-          const c = [...document.querySelectorAll('script:not([src])')].map(s => s.textContent).join('').match(/lat[^:\d-]*([\d.-]+)[^:lat\d-]{1,30}lo?ng?[^:\d-]*([\d.-]+)/i);
-          if (c) { lat = parseFloat(c[1]).toFixed(4); lng = parseFloat(c[2]).toFixed(4); }
+          for (const s of document.querySelectorAll('script:not([src])')) {
+            const c = s.textContent.match(/"latitude"\s*:\s*([\d.-]+)[^}]{1,200}"longitude"\s*:\s*([\d.-]+)/);
+            if (c) { lat = parseFloat(c[1]).toFixed(4); lng = parseFloat(c[2]).toFixed(4); break; }
+          }
         }
-
-        // Star rating
-        const starEl = document.querySelector('[data-element-name="hotel-header-stars"], [class*="star-rating"]');
-        const starRating = String(starEl ? (starEl.querySelectorAll('[class*="star--active"], [class*="filled"], svg').length || 0) : 0);
+        // fallback address: DOM
+        if (!address) {
+          const addrEl = document.querySelector('[data-selenium="hotel-address"], [data-element-name="hotel-header-location"]');
+          address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+        }
+        // fallback star: data-selenium attribute
+        if (starRating === '0') {
+          const starEl = document.querySelector('[data-selenium="hotel-star-rating"], [data-element-name="hotel-header-stars"]');
+          if (starEl) starRating = String(starEl.querySelectorAll('svg, i, span[class*="star"]').length || 0);
+        }
 
         // Accommodation type
         const n = hotelName.toLowerCase();
@@ -1470,17 +1498,28 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
         else if (/capsule/.test(n)) accommodationType = 'CAPSULE_HOTEL';
         else if (/guesthouse|guest house/.test(n)) accommodationType = 'GUESTHOUSE';
 
-        // Facilities from page text
+        // Hotel Bulk Insert — hotel-level facility codes only
         const fmap = [
-          {keywords:['balcony','terrace'],code:'BALCONY_TERRACE'},{keywords:['connecting room','interconnecting'],code:'INTERCONNECTING_ROOMS_AVAILABLE'},
-          {keywords:['private pool'],code:'PRIVATE_POOL'},{keywords:['shower'],code:'SHOWER'},{keywords:['bathrobes','bathrobe'],code:'BATHROBES'},
-          {keywords:['bathtub'],code:'BATHTUB'},{keywords:['hot water','heated water'],code:'HEATED_WATER'},{keywords:['air conditioning'],code:'AIR_CONDITIONING'},
-          {keywords:['hair dryer'],code:'HAIR_DRYER'},{keywords:['desk'],code:'DESK'},
-          {keywords:['free wi-fi','wi-fi','wifi','free internet'],code:'INTERNET_ACCESS_WIFI_COMPLIMENTARY'},
-          {keywords:['microwave'],code:'MICROWAVE'},{keywords:['washing machine'],code:'WASHING_MACHINE'},{keywords:['iron','ironing'],code:'IRONING_FACILITIES'},
-          {keywords:['television','tv'],code:'TELEVISION'},{keywords:['refrigerator','fridge'],code:'REFRIGERATOR'},
-          {keywords:['mini bar','minibar'],code:'MINI_BAR'},{keywords:['kettle','coffee','tea'],code:'COFFEE_TEA_MAKER'},
-          {keywords:['bottled water'],code:'COMPLIMENTARY_BOTTLED_WATER'}
+          {keywords:['24-hour front desk','front desk [24-hour]','24 hour front desk'],code:'HAS_24_HOUR_FRONT_DESK'},
+          {keywords:['wi-fi in public','wi-fi in all rooms','free wi-fi','wi-fi [free]','wifi in public'],code:'WIFI_PUBLIC_AREA'},
+          {keywords:['car park','parking'],code:'CARPARK'},
+          {keywords:['room service'],code:'ROOM_SERVICE'},
+          {keywords:['laundry service','laundromat'],code:'LAUNDRY_SERVICE'},
+          {keywords:['air conditioning'],code:'AIR_CONDITIONING'},
+          {keywords:['restaurant'],code:'RESTAURANT'},
+          {keywords:['shower'],code:'SHOWER'},
+          {keywords:['television','cable tv','lcd tv'],code:'TELEVISION'},
+          {keywords:['safety deposit'],code:'SAFETY_DEPOSIT_BOX'},
+          {keywords:['atm','banking','cash machine'],code:'ATM_OR_BANKING'},
+          {keywords:['non-smoking rooms','non-smoking','smoke-free'],code:'NON_SMOKING_ROOM'},
+          {keywords:['luggage storage'],code:'LUGGAGE_STORAGE'},
+          {keywords:['outdoor pool','swimming pool'],code:'OUTDOOR_POOL'},
+          {keywords:['smoking area'],code:'SMOKING_AREA'},
+          {keywords:['desk'],code:'DESK'},
+          {keywords:['car hire','car rental'],code:'CAR_HIRE'},
+          {keywords:['cable tv','cable television'],code:'CABLE_TV'},
+          {keywords:['shop'],code:'SHOPS'},
+          {keywords:['meeting','banquet','seminar','conference'],code:'MEETING_FACILITIES'},
         ];
         const ft = text.toLowerCase();
         const hotelFacilities = fmap.filter(f => f.keywords.some(k => ft.includes(k))).map(f => f.code).join(', ');
@@ -1511,15 +1550,26 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
        await exec(tab.id, (d, personName) => {
       const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzJw0zPaNbeh3dpygO393HkmQVvlpCXkVpIcySbxGqFBqLyyWQiCHWRCI2C8KUfyKAm/exec";
       const hotelFacilityMap = [
-        {keywords:["balcony","terrace"],code:"BALCONY_TERRACE"},{keywords:["connecting room","interconnecting"],code:"INTERCONNECTING_ROOMS_AVAILABLE"},
-        {keywords:["private pool"],code:"PRIVATE_POOL"},{keywords:["shower"],code:"SHOWER"},{keywords:["bathrobes","bathrobe"],code:"BATHROBES"},
-        {keywords:["bathtub"],code:"BATHTUB"},{keywords:["hot water","heated water"],code:"HEATED_WATER"},{keywords:["air conditioning"],code:"AIR_CONDITIONING"},
-        {keywords:["hair dryer"],code:"HAIR_DRYER"},{keywords:["desk"],code:"DESK"},
-        {keywords:["free wi-fi","wi-fi in public","wi-fi in room","wifi","free internet"],code:"INTERNET_ACCESS_WIFI_COMPLIMENTARY"},
-        {keywords:["microwave"],code:"MICROWAVE"},{keywords:["washing machine"],code:"WASHING_MACHINE"},{keywords:["iron","ironing"],code:"IRONING_FACILITIES"},
-        {keywords:["shared bathroom"],code:"SHARED_BATHROOM"},{keywords:["television","lcd tv"],code:"TELEVISION"},{keywords:["refrigerator"],code:"REFRIGERATOR"},
-        {keywords:["mini bar","minibar"],code:"MINI_BAR"},{keywords:["electric kettle","coffee","tea"],code:"COFFEE_TEA_MAKER"},
-        {keywords:["bottled water"],code:"COMPLIMENTARY_BOTTLED_WATER"}
+        {keywords:["24-hour front desk","front desk [24-hour]","24 hour front desk"],code:"HAS_24_HOUR_FRONT_DESK"},
+        {keywords:["wi-fi in public areas","free wi-fi","wi-fi in all rooms","wifi in public"],code:"WIFI_PUBLIC_AREA"},
+        {keywords:["car park","parking"],code:"CARPARK"},
+        {keywords:["room service"],code:"ROOM_SERVICE"},
+        {keywords:["laundry service","laundromat"],code:"LAUNDRY_SERVICE"},
+        {keywords:["air conditioning"],code:"AIR_CONDITIONING"},
+        {keywords:["restaurant"],code:"RESTAURANT"},
+        {keywords:["shower"],code:"SHOWER"},
+        {keywords:["television","cable tv","lcd tv"],code:"TELEVISION"},
+        {keywords:["safety deposit"],code:"SAFETY_DEPOSIT_BOX"},
+        {keywords:["atm","banking","cash machine"],code:"ATM_OR_BANKING"},
+        {keywords:["non-smoking rooms","non-smoking","smoke-free"],code:"NON_SMOKING_ROOM"},
+        {keywords:["luggage storage"],code:"LUGGAGE_STORAGE"},
+        {keywords:["outdoor pool","swimming pool"],code:"OUTDOOR_POOL"},
+        {keywords:["smoking area"],code:"SMOKING_AREA"},
+        {keywords:["desk"],code:"DESK"},
+        {keywords:["car hire","car rental"],code:"CAR_HIRE"},
+        {keywords:["cable tv","cable television"],code:"CABLE_TV"},
+        {keywords:["shop"],code:"SHOPS"},
+        {keywords:["meeting","banquet","seminar","conference"],code:"MEETING_FACILITIES"},
       ];
       function extractFacilities(list) {
         const texts = [];
