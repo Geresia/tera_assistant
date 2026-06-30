@@ -1687,8 +1687,8 @@ const agodaExtractForDetail = () => {
 
   data.name_en = agoda?.propertyName || document.querySelector('h1')?.innerText?.trim() || '';
 
-  // Check-in/out from room benefits
-  let checkIn = '14:00', checkOut = '12:00';
+  // Check-in/out: room benefits 우선, 없으면 페이지 텍스트
+  let checkIn = '', checkOut = '';
   outer: for (const room of (agoda?.rooms || [])) {
     for (const offer of (room.offers || [])) {
       for (const b of (offer.benefits || [])) {
@@ -1700,10 +1700,17 @@ const agodaExtractForDetail = () => {
       }
     }
   }
-  if (checkIn === '14:00') { const m = text.match(/check.?in[:\s]+(\d{1,2}:\d{2})/i); if (m) checkIn = m[1]; }
-  if (checkOut === '12:00') { const m = text.match(/check.?out[:\s]+(\d{1,2}:\d{2})/i); if (m) checkOut = m[1]; }
-  data.checkin_time = checkIn;
-  data.checkout_time = checkOut;
+  // "Check-in from: 15:00" / "Check-out until: 12:00" Agoda 포맷
+  if (!checkIn) {
+    const m = text.match(/Check-in from[:\s]+(\d{1,2}:\d{2})/i) || text.match(/check.?in[^0-9\n]*(\d{1,2}:\d{2})/i);
+    if (m) checkIn = m[1];
+  }
+  if (!checkOut) {
+    const m = text.match(/Check-out until[:\s]+(\d{1,2}:\d{2})/i) || text.match(/check.?out[^0-9\n]*(\d{1,2}:\d{2})/i);
+    if (m) checkOut = m[1];
+  }
+  data.checkin_time = checkIn || '15:00';
+  data.checkout_time = checkOut || '12:00';
   data.checkin_end = '23:59';
   data.checkout_start = '00:00';
   data.front_desk_hours = "Yes";
@@ -1717,6 +1724,8 @@ const agodaExtractForDetail = () => {
       const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
       if (hotel) {
         if (hotel.name) localName = hotel.name;
+        // alternateName에 현지어 이름이 있으면 우선 사용
+        if (hotel.alternateName) localName = hotel.alternateName;
         if (hotel.address) {
           const a = hotel.address;
           if (typeof a === 'string') {
@@ -1734,30 +1743,54 @@ const agodaExtractForDetail = () => {
     } catch(e) {}
   }
   data.name_local = localName || data.name_en;
+  // address: JSON-LD 실패 시 DOM 여러 셀렉터 순서대로 시도
   if (!address) {
-    const addrEl = document.querySelector('[data-selenium="hotel-address"], [data-element-name="hotel-header-location"]');
-    address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+    const addrSelectors = [
+      '[data-selenium="hotel-address"]',
+      '[data-element-name="hotel-header-location"]',
+      '[class*="HeaderAddress"]',
+      '[class*="hotel-address"]',
+      '.PropertyHeaderAddress',
+      'span[itemprop="address"]',
+    ];
+    for (const sel of addrSelectors) {
+      const el = document.querySelector(sel);
+      if (el?.innerText?.trim()) {
+        address = el.innerText.trim().replace(/\n/g, ', ');
+        break;
+      }
+    }
   }
+  // 여전히 없으면 __teraAgodaRooms.propertyAddress 시도
+  if (!address && agoda?.propertyAddress) address = agoda.propertyAddress;
   data.address = address;
   data.postal_code = postalCode;
 
-  // Voltage by country code
-  const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
-  data.voltage = voltMap[countryCode] || '';
+  // Voltage: 페이지 직접 추출("Room voltage: 220"), 없으면 countryCode 추측
+  const voltFromPage = text.match(/Room voltage\s*:\s*(\d+)/i);
+  if (voltFromPage) {
+    data.voltage = voltFromPage[1] + 'V';
+  } else {
+    const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
+    data.voltage = voltMap[countryCode] || '';
+  }
 
-  // Property details from page text
+  // Property details — Agoda 포맷: "Number of floors: 15", "Number of rooms : 312"
   const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
   data.built_year = builtM?.[1] || '';
   const renM = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
   data.renovated_year = renM?.[1] || data.built_year || '';
-  const roomM = text.match(/(\d+)\s*(?:guest\s*)?rooms?/i);
+  const roomM = text.match(/Number of rooms\s*:\s*(\d+)/i) || text.match(/(\d+)\s*(?:guest\s*)?rooms?/i);
   data.room_count = roomM?.[1] || '';
-  const floorM = text.match(/(\d+)\s*floors?/i) || text.match(/(\d+)(?:th|rd|nd|st)\s*floors?/i);
+  const floorM = text.match(/Number of floors\s*:\s*(\d+)/i) || text.match(/(\d+)\s*floors?/i);
   data.floor_count = floorM?.[1] || '';
-  const restM = text.match(/(\d+)\s*restaurants?/i);
+  const restM = text.match(/Number of restaurants\s*:\s*(\d+)/i) || text.match(/(\d+)\s*restaurants?/i);
   data.restaurant_count = restM?.[1] || '-';
-  const barM = text.match(/(\d+)\s*bars?\b/i);
+  const barM = text.match(/Number of bars\s*:\s*(\d+)/i) || text.match(/(\d+)\s*bars?\b/i);
   data.bar_count = barM?.[1] || '-';
+  // "Breakfast charge (unless included in room price): 22000 KRW"
+  const brkM = text.match(/Breakfast charge[^:]*:\s*([\d,]+)/i);
+  data.breakfast_price = brkM ? brkM[1].replace(/,/g, '') : '-';
 
   // Room service, parking, airport transfer
   data.room_service = /room\s*service/i.test(text) ? 'Yes' : 'No';
@@ -1785,6 +1818,8 @@ const agodaExtractForDetail = () => {
     const t2 = el.innerText?.trim().toLowerCase();
     if (t2) amenitySet.add(t2);
   }
+  // DOM 셀렉터 실패 시 페이지 텍스트 전체를 단일 desc로 fallback
+  if (amenitySet.size === 0) amenitySet.add(text.toLowerCase());
   data._tripFacilities = [...amenitySet].map(desc => ({ desc }));
 
   return data;
@@ -1832,6 +1867,41 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       const results = await exec(tab.id, agodaExtractForDetail, [], "MAIN");
       const data = results?.[0]?.result;
       if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
+
+      // ko-kr 페이지에서 현지어 이름/주소 추출 (새 탭 없이 백그라운드 fetch)
+      const koKrUrl = tab.url
+        .replace(/^(https:\/\/www\.agoda\.com\/)([a-z]{2}-[a-z]{2}\/)?/, '$1ko-kr/')
+        .split('?')[0];
+      try {
+        setExtractStatus(currentLang === 'kr' ? '현지어 정보 가져오는 중...' : 'Fetching local info...');
+        const res = await fetch(koKrUrl);
+        const html = await res.text();
+        const ldPattern = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+        let m;
+        while ((m = ldPattern.exec(html)) !== null) {
+          try {
+            const json = JSON.parse(m[1]);
+            const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+            const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+            if (hotel) {
+              if (hotel.name) data.name_local = hotel.name;
+              if (hotel.address && typeof hotel.address === 'object') {
+                const a = hotel.address;
+                const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+                const koAddr = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(' ');
+                if (koAddr) data.address = koAddr;
+                if (a.postalCode) data.postal_code = a.postalCode;
+              }
+              break;
+            }
+          } catch(e) {}
+        }
+      } catch(e) {
+        console.log('[Agoda] ko-kr fetch 실패:', koKrUrl, e.message);
+        setExtractStatus('ko-kr fetch 실패: ' + e.message, 'error');
+        await new Promise(r => setTimeout(r, 3000));
+      }
+
       currentHotelData = data;
       setExtractStatus(t().extractDone(data.name_en), "success");
       await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
