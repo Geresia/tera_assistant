@@ -52,6 +52,14 @@
       } catch(e) {}
     }
 
+    if (url.includes('BelowFoldParams/GetSecondaryData')) {
+      try {
+        const data = await res.clone().json();
+        console.log('[tera] BelowFold keys:', Object.keys(data));
+        window.__teraAgodaBelowFold = data;
+      } catch(e) {}
+    }
+
     return res;
   };
 })();
