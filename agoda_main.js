@@ -43,7 +43,10 @@
             Object.values(obj).forEach(collect);
           };
           collect(details[0]);
-          console.log('[tera] graphql/property intercepted, usefulInfo count:', allUseful.length, allUseful);
+          console.log('[tera] graphql/property intercepted');
+          console.log('[tera] details[0] keys:', Object.keys(details[0] || {}));
+          console.log('[tera] contentDetail keys:', Object.keys(details[0]?.contentDetail || {}));
+          console.log('[tera] usefulInfo count:', allUseful.length, allUseful.slice(0, 5));
           if (allUseful.length) window.__teraAgodaUsefulInfo = allUseful;
         }
       } catch(e) {}
