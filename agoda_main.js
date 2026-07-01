@@ -10,11 +10,14 @@
     const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
 
     if (url.includes('room-grid')) {
-      window.__teraAgodaRoomGridUrl = url; // ko-kr 재호출용 URL 저장
       try {
         const data = await res.clone().json();
         if (data.rooms?.length) window.__teraAgodaRooms = data;
       } catch(e) {}
+    }
+
+    if (url.includes('BelowFoldParams/GetSecondaryData')) {
+      window.__teraAgodaSecondaryUrl = url;
     }
 
     if (url.includes('graphql/property')) {
