@@ -1741,23 +1741,26 @@ const agodaExtractForDetail = () => {
   data.address = address;
   data.postal_code = postalCode;
 
-  // Voltage by country code
-  const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
-  data.voltage = voltMap[countryCode] || '';
+  // Property details: graphql/property usefulInfo 우선, 없으면 페이지 텍스트 fallback
+  const useful = window.__teraAgodaUsefulInfo || [];
+  const getU = (keyword) => useful.find(i => i.name?.toLowerCase().includes(keyword.toLowerCase()))?.description || '';
 
-  // Property details from page text
   const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
   data.built_year = builtM?.[1] || '';
   const renM = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
   data.renovated_year = renM?.[1] || data.built_year || '';
-  const roomM = text.match(/(\d+)\s*(?:guest\s*)?rooms?/i);
-  data.room_count = roomM?.[1] || '';
-  const floorM = text.match(/(\d+)\s*floors?/i) || text.match(/(\d+)(?:th|rd|nd|st)\s*floors?/i);
-  data.floor_count = floorM?.[1] || '';
-  const restM = text.match(/(\d+)\s*restaurants?/i);
-  data.restaurant_count = restM?.[1] || '-';
-  const barM = text.match(/(\d+)\s*bars?\b/i);
-  data.bar_count = barM?.[1] || '-';
+  data.room_count = getU('rooms') || getU('room') || text.match(/(\d+)\s*(?:guest\s*)?rooms?/i)?.[1] || '';
+  data.floor_count = getU('floor') || text.match(/(\d+)\s*floors?/i)?.[1] || '';
+  data.restaurant_count = getU('restaurant') || text.match(/(\d+)\s*restaurants?/i)?.[1] || '-';
+  data.bar_count = getU('bar') || text.match(/(\d+)\s*bars?\b/i)?.[1] || '-';
+
+  const voltageRaw = getU('voltage');
+  if (voltageRaw) {
+    data.voltage = voltageRaw + 'V';
+  } else {
+    const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
+    data.voltage = voltMap[countryCode] || '';
+  }
 
   // Room service, parking, airport transfer
   data.room_service = /room\s*service/i.test(text) ? 'Yes' : 'No';

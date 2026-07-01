@@ -33,6 +33,17 @@
             return [val.replace(/\?.*/, '')];
           }).slice(0, 10);
           if (photos.length) window.__teraAgodaHotelPhotos = photos;
+
+          // usefulInfo 전체 수집 (floors, rooms, voltage 등)
+          const allUseful = [];
+          const collect = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            if (Array.isArray(obj)) { obj.forEach(collect); return; }
+            if (Array.isArray(obj.usefulInfo)) allUseful.push(...obj.usefulInfo);
+            Object.values(obj).forEach(collect);
+          };
+          collect(details[0]);
+          if (allUseful.length) window.__teraAgodaUsefulInfo = allUseful;
         }
       } catch(e) {}
     }
