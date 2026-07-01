@@ -1872,18 +1872,30 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       // room-grid API를 ko-kr 로케일로 재호출 → 현지어 이름/주소 추출
       if (data._roomGridUrl) {
         try {
-          setExtractStatus(currentLang === 'kr' ? '현지어 정보 가져오는 중...' : 'Fetching local info...');
+          setExtractStatus('ko-kr API 호출 중...');
           const koKrApiUrl = data._roomGridUrl
             .replace(/\ben-[a-z]{2}\b/gi, 'ko-kr')
             .replace(/locale=[^&]+/i, 'locale=ko-kr')
             .replace(/lang=[^&]+/i, 'lang=ko-kr')
             .replace(/culture=[^&]+/i, 'culture=ko-kr');
+          setExtractStatus('URL: ' + koKrApiUrl.slice(0, 150));
+          await new Promise(r => setTimeout(r, 4000));
           const res = await fetch(koKrApiUrl);
           const koData = await res.json();
+          // 결과 구조 확인용 임시 출력
+          const preview = JSON.stringify({
+            keys: Object.keys(koData),
+            propertyName: koData.propertyName,
+            propertyAddress: koData.propertyAddress,
+            localName: koData.localName,
+          });
+          setExtractStatus('ko-kr 응답: ' + preview.slice(0, 200));
+          await new Promise(r => setTimeout(r, 6000));
           if (koData.propertyName) data.name_local = koData.propertyName;
           if (koData.propertyAddress) data.address = koData.propertyAddress;
         } catch(e) {
-          console.log('[Agoda] ko-kr API 실패:', e.message);
+          setExtractStatus('ko-kr API 실패: ' + e.message);
+          await new Promise(r => setTimeout(r, 4000));
         }
       }
 
