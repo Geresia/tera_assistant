@@ -16,10 +16,6 @@
       } catch(e) {}
     }
 
-    if (url.includes('BelowFoldParams/GetSecondaryData')) {
-      window.__teraAgodaSecondaryUrl = url;
-    }
-
     if (url.includes('graphql/property')) {
       try {
         const body = await res.clone().json();
