@@ -1743,6 +1743,7 @@ const agodaExtractForDetail = () => {
 
   // Property details: graphql/property usefulInfo 우선, 없으면 페이지 텍스트 fallback
   const useful = window.__teraAgodaUsefulInfo || [];
+  console.log('[tera] usefulInfo at extract time:', useful.length, useful);
   const getU = (keyword) => useful.find(i => i.name?.toLowerCase().includes(keyword.toLowerCase()))?.description || '';
 
   const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
