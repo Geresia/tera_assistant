@@ -9,9 +9,8 @@
     const res = await orig.apply(this, args);
     const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
 
-    console.log('[tera] fetch:', url.slice(0, 120));
-
     if (url.includes('room-grid')) {
+      window.__teraAgodaRoomGridUrl = url; // ko-kr 재호출용 URL 저장
       try {
         const data = await res.clone().json();
         if (data.rooms?.length) window.__teraAgodaRooms = data;

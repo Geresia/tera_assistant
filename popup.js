@@ -1821,6 +1821,7 @@ const agodaExtractForDetail = () => {
   // DOM 셀렉터 실패 시 페이지 텍스트 전체를 단일 desc로 fallback
   if (amenitySet.size === 0) amenitySet.add(text.toLowerCase());
   data._tripFacilities = [...amenitySet].map(desc => ({ desc }));
+  data._roomGridUrl = window.__teraAgodaRoomGridUrl || '';
 
   return data;
 };
@@ -1868,38 +1869,22 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       const data = results?.[0]?.result;
       if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
 
-      // ko-kr 페이지에서 현지어 이름/주소 추출 (새 탭 없이 백그라운드 fetch)
-      const koKrUrl = tab.url
-        .replace(/^(https:\/\/www\.agoda\.com\/)([a-z]{2}-[a-z]{2}\/)?/, '$1ko-kr/')
-        .split('?')[0];
-      try {
-        setExtractStatus(currentLang === 'kr' ? '현지어 정보 가져오는 중...' : 'Fetching local info...');
-        const res = await fetch(koKrUrl);
-        const html = await res.text();
-        const ldPattern = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
-        let m;
-        while ((m = ldPattern.exec(html)) !== null) {
-          try {
-            const json = JSON.parse(m[1]);
-            const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
-            const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
-            if (hotel) {
-              if (hotel.name) data.name_local = hotel.name;
-              if (hotel.address && typeof hotel.address === 'object') {
-                const a = hotel.address;
-                const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
-                const koAddr = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(' ');
-                if (koAddr) data.address = koAddr;
-                if (a.postalCode) data.postal_code = a.postalCode;
-              }
-              break;
-            }
-          } catch(e) {}
+      // room-grid API를 ko-kr 로케일로 재호출 → 현지어 이름/주소 추출
+      if (data._roomGridUrl) {
+        try {
+          setExtractStatus(currentLang === 'kr' ? '현지어 정보 가져오는 중...' : 'Fetching local info...');
+          const koKrApiUrl = data._roomGridUrl
+            .replace(/\ben-[a-z]{2}\b/gi, 'ko-kr')
+            .replace(/locale=[^&]+/i, 'locale=ko-kr')
+            .replace(/lang=[^&]+/i, 'lang=ko-kr')
+            .replace(/culture=[^&]+/i, 'culture=ko-kr');
+          const res = await fetch(koKrApiUrl);
+          const koData = await res.json();
+          if (koData.propertyName) data.name_local = koData.propertyName;
+          if (koData.propertyAddress) data.address = koData.propertyAddress;
+        } catch(e) {
+          console.log('[Agoda] ko-kr API 실패:', e.message);
         }
-      } catch(e) {
-        console.log('[Agoda] ko-kr fetch 실패:', koKrUrl, e.message);
-        setExtractStatus('ko-kr fetch 실패: ' + e.message, 'error');
-        await new Promise(r => setTimeout(r, 3000));
       }
 
       currentHotelData = data;
