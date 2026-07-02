@@ -1179,11 +1179,24 @@ const hotelDetailsScript = (d) => {
   const pkAvail = d.parking && d.parking !== "No";
   push("Parking", clickRadio("hotel,hotelProperties,parkingType", pkAvail ? "AVAILABLE" : "NOT_AVAILABLE"));
   if (pkAvail && d.parking_type) push("Parking Fee", clickRadio("hotel,hotelProperties,parkingFeeType", d.parking_type === "Free" ? "FREE" : "CHARGE"));
-  if (d.breakfast_price && d.breakfast_price !== "-") push("Breakfast", setInput("hotel,hotelProperties,breakfastCharge", d.breakfast_price));
+  if (d.breakfast_price && d.breakfast_price !== "-") {
+    push("Breakfast", setInput("hotel,hotelProperties,breakfastCharge", d.breakfast_price));
+  } else {
+    const brkInput = document.querySelector('input[name="hotel,hotelProperties,breakfastCharge"]');
+    if (brkInput) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(brkInput, "");
+      brkInput.dispatchEvent(new Event('input', { bubbles: true }));
+      brkInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
 
   const atVal = d.airport_transfer === "Yes" ? "true" : "false";
   push("Airport Transfer", clickRadio("hotel,hotelProperties,isAvailableAirportTransfer", atVal));
-  if (atVal === "true" && d.airport_transfer_fee && d.airport_transfer_fee !== "-") push("Transfer Fee", setInput("hotel,hotelProperties,airportTransferFee", d.airport_transfer_fee));
+  if (atVal === "true" && d.airport_transfer_fee && d.airport_transfer_fee !== "-") {
+    const feeVal = /free/i.test(d.airport_transfer_fee) ? "0" : d.airport_transfer_fee;
+    push("Transfer Fee", setInput("hotel,hotelProperties,airportTransferFee", feeVal));
+  }
 
   const saveBtn = document.querySelector('button.c-btn--variant-orange span');
   if (saveBtn) { saveBtn.closest('button').click(); results.push({ field: "Save", status: "ok" }); }
@@ -1237,6 +1250,13 @@ const hotelAddressScript = (d) => {
       results.push({ field: "Local Address", status: setTextarea("hotel,localAddress,lines", d.address) ? "ok" : "not_found" });
     } else {
       results.push({ field: "Local Address Yes", status: "not_found" });
+    }
+  } else {
+    const noRadio = document.querySelector('input[type="radio"][value="no"]');
+    if (noRadio) {
+      noRadio.click();
+      noRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      results.push({ field: "Local Address No", status: "ok" });
     }
   }
 
@@ -1680,8 +1700,27 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 });
 
 // ── Agoda Hotel Detail Extract (runs in page MAIN world) ──
-const agodaExtractForDetail = () => {
+const agodaExtractForDetail = async () => {
   const agoda = window.__teraAgodaRooms;
+
+  // "Some helpful facts" + BelowFold API 모두 lazy-load → 스크롤로 트리거 후 대기
+  window.scrollTo(0, Math.min(2500, document.body.scrollHeight / 2));
+  await new Promise(r => setTimeout(r, 1200));
+  window.scrollTo(0, 0);
+
+  // BelowFold: 인터셉트된 것 우선, 없으면 hotel_id로 직접 fetch
+  let belowFold = window.__teraAgodaBelowFold;
+  if (!belowFold) {
+    const idM = window.location.href.match(/\/(\d{5,8})\.html/)
+      || window.location.search.match(/[?&]hotel_id=(\d+)/i);
+    const hotelId = idM?.[1];
+    if (hotelId) {
+      try {
+        const r = await fetch(`/api/cronos/property/BelowFoldParams/GetSecondaryData?hotel_id=${hotelId}&checkIn=&los=2&adults=2&children=0&rooms=1`);
+        if (r.ok) belowFold = await r.json();
+      } catch(e) {}
+    }
+  }
   const text = document.body?.innerText || "";
   const data = {};
 
@@ -1733,7 +1772,7 @@ const agodaExtractForDetail = () => {
       }
     } catch(e) {}
   }
-  data.name_local = localName || data.name_en;
+  data.name_local = '';
   if (!address) {
     const addrEl = document.querySelector('[data-selenium="hotel-address"], [data-element-name="hotel-header-location"]');
     address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
@@ -1741,27 +1780,50 @@ const agodaExtractForDetail = () => {
   data.address = address;
   data.postal_code = postalCode;
 
-  // Property details: graphql/property usefulInfo 우선, 없으면 페이지 텍스트 fallback
+  // BelowFold: 한국어 이름/주소 덮어쓰기
+  if (belowFold) {
+    const kName = belowFold?.searchbox?.searchCriteria?.searchText;
+    if (kName && kName !== data.name_en) data.name_local = kName;
+    const bAddr = belowFold?.address;
+    if (bAddr?.address) data.address = [bAddr.cityName, bAddr.address].filter(Boolean).join(', ');
+  }
+
+  // Property details: usefulInfo 우선, 없으면 페이지 텍스트 (스크롤 후 로딩된 "Some helpful facts")
   const useful = window.__teraAgodaUsefulInfo || [];
-  console.log('[tera] usefulInfo at extract time:', useful.length, useful);
   const getU = (keyword) => useful.find(i => i.name?.toLowerCase().includes(keyword.toLowerCase()))?.description || '';
 
   const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
-  data.built_year = builtM?.[1] || '';
+  data.built_year = getU('year property opened') || getU('year opened') || getU('opened') || getU('year') || builtM?.[1] || '';
   const renM = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
-  data.renovated_year = renM?.[1] || data.built_year || '';
-  data.room_count = getU('rooms') || getU('room') || text.match(/(\d+)\s*(?:guest\s*)?rooms?/i)?.[1] || '';
-  data.floor_count = getU('floor') || text.match(/(\d+)\s*floors?/i)?.[1] || '';
-  data.restaurant_count = getU('restaurant') || text.match(/(\d+)\s*restaurants?/i)?.[1] || '-';
-  data.bar_count = getU('bar') || text.match(/(\d+)\s*bars?\b/i)?.[1] || '-';
+  data.renovated_year = getU('renovated') || renM?.[1] || data.built_year || '';
 
-  const voltageRaw = getU('voltage');
+  data.room_count = getU('rooms') || getU('room')
+    || text.match(/Number of (?:guest )?rooms?\s*[:\s]+(\d+)/i)?.[1]
+    || text.match(/(\d+)\s*(?:guest\s*)?rooms?/i)?.[1] || '';
+  data.floor_count = getU('floor')
+    || text.match(/Number of floors?\s*[:\s]+(\d+)/i)?.[1]
+    || text.match(/(\d+)\s*floors?/i)?.[1] || '';
+  data.restaurant_count = getU('restaurant')
+    || text.match(/Number of restaurants?\s*[:\s]+(\d+)/i)?.[1]
+    || text.match(/(\d+)\s*restaurants?/i)?.[1] || '-';
+  data.bar_count = getU('bar')
+    || text.match(/Number of bars?\s*[:\s]+(\d+)/i)?.[1]
+    || text.match(/(\d+)\s*bars?\b/i)?.[1] || '-';
+
+  const voltageRaw = getU('voltage')
+    || text.match(/Voltage\s*[:\s]+(\d+)/i)?.[1];
   if (voltageRaw) {
-    data.voltage = voltageRaw + 'V';
+    data.voltage = /^\d+$/.test(voltageRaw) ? voltageRaw + 'V' : voltageRaw;
   } else {
     const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
     data.voltage = voltMap[countryCode] || '';
   }
+
+  // Breakfast price: "Breakfast charge: 22000 KRW" / "₩ 22,000" / "KRW 22000"
+  const brkM = text.match(/Breakfast charge[^\n]*:\s*([\d,]+)\s*(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)/i)
+    || text.match(/(?:breakfast|buffet)[^\n]*₩\s*([\d,]+)/i)
+    || text.match(/(?:breakfast|buffet)[^\n]*(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)/i);
+  if (brkM) data.breakfast_price = brkM[1].replace(/,/g, '');
 
   // Room service, parking, airport transfer
   data.room_service = /room\s*service/i.test(text) ? 'Yes' : 'No';
@@ -1776,20 +1838,20 @@ const agodaExtractForDetail = () => {
   }
   data.parking_price = '-';
   data.airport_transfer = /airport\s*(?:pickup|shuttle|transfer)/i.test(text) ? 'Yes' : 'No';
-  data.airport_transfer_fee = '-';
-
-  // Facilities: Agoda amenity 항목 텍스트 수집 → popup.js HOTEL_FACILITY_MAP 키워드 매칭 위임
-  const amenitySet = new Set();
-  const amenityEls = document.querySelectorAll(
-    '[class*="amenit"] li, [class*="facilit"] li, ' +
-    '[data-element-name*="amenity"] li, [data-element-name*="facility"] li, ' +
-    '[data-selenium*="amenity"] li, [data-selenium*="facilit"] li'
-  );
-  for (const el of amenityEls) {
-    const t2 = el.innerText?.trim().toLowerCase();
-    if (t2) amenitySet.add(t2);
+  if (data.airport_transfer === 'Yes') {
+    if (/free[^.]*airport\s*(?:pickup|shuttle|transfer)|airport\s*(?:pickup|shuttle|transfer)[^.]*free/i.test(text)) {
+      data.airport_transfer_fee = 'Free';
+    } else {
+      const atFeeM = text.match(/airport\s*(?:pickup|shuttle|transfer)[^.]*?(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)/i)
+        || text.match(/(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)[^.]*airport\s*(?:pickup|shuttle|transfer)/i);
+      data.airport_transfer_fee = atFeeM ? atFeeM[1].replace(/,/g, '') : '-';
+    }
+  } else {
+    data.airport_transfer_fee = '-';
   }
-  data._tripFacilities = [...amenitySet].map(desc => ({ desc }));
+
+  // Facilities: 전체 페이지 텍스트로 키워드 매칭 (DOM 셀렉터 대신)
+  data._tripFacilities = [{ desc: text }];
 
   return data;
 };
