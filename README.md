@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-5.3-blue)
+![Version](https://img.shields.io/badge/version-5.4-blue)
 ![Chrome Extension](https://img.shields.io/badge/Chrome-MV3-green)
 ![JavaScript](https://img.shields.io/badge/JavaScript-91%25-yellow)
 ![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-MobileNet-orange)
@@ -75,6 +75,7 @@ Double click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 - `manifest.json` - Extension configuration
 - `popup.html` / `popup.js` - Side Panel UI and logic
 - `content.js` - Scrapes room and hotel photo data from Trip.com
+- `agoda_main.js` - Injected into Agoda pages at document_start to intercept API responses (room-grid, graphql/property, BelowFoldParams)
 - `background.js` - Opens Side Panel on extension icon click
 - `Tera_Update.bat` / `update.ps1` - One-click update script
 - `jszip.min.js` - ZIP file library
@@ -83,6 +84,8 @@ Double click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ---
 
 ## Version History
+- **5.4** - Agoda Hotel Detail Insert improvements: built year from usefulInfo ("Year property opened"), renovated year fallback to built year, facilities via full page text, breakfast charge regex fixed for KRW/₩ formats with field clear when not found, airport transfer free → 0, BelowFold API direct fetch fallback, local name/address No radio when Korean data unavailable.
+- **5.3** - Added Agoda support: Hotel Detail Insert for Agoda hotel pages. Intercepts room-grid, graphql/property, and BelowFoldParams APIs via agoda_main.js content script injected at document_start.
 - **5.0** - Rebranded to Tera Assistant. Merged Hotel Info Extractor into Room Scraper. Added Hotel Info section with Extract and Sheet buttons. UI redesigned with clean flat layout and KR/EN language toggle. Switched to Side Panel. Added hotel-level facility extraction, local name, address, check-in/out, parking, breakfast, airport transfer, voltage auto-fill support. Added hotel photo upload to Tera (hotel-photo page). AI-based room photo classification using MobileNet. 401 error handling with auto-retry countdown and Retry Now button. Hotel photo limit of 10.
 - **4.0** - Migrated room scraping and hotel photos to Trip.com API (`physicRoomMap` + `getHotelDetailAggregate`). Removed DOM-based scraping. Now works on all regional Trip.com domains.
 - **3.0** - Added ZIP photo download feature. Added language toggle (KR/EN) and auto expand hidden room types.
