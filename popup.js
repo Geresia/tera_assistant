@@ -787,7 +787,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
-  }, [room.maxAdults || 2]);
+  }, [room.maxAdults || room.occupancy || 2]);
   await sleep(500);
 
   await exec(tabId, () => {
@@ -806,6 +806,10 @@ async function teraFillOneRoom(tabId, room, roomType) {
     const input = document.querySelector('[data-testid="input-rs-room-rate-protection-amount"]');
     if (!input) return;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    if (input.value) {
+      setter.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     setter.call(input, amount);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));

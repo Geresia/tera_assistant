@@ -216,7 +216,6 @@ function parsePhysicRoomMap(physicRoomMap, saleRoomMap, roomPopInfo) {
       }
     }
   }
-
   // 이름에서 "High FL", "High Floor" 등의 층수 접미사를 제거한 기본 이름 추출
   const stripFloorSuffix = (name) => (name || "").replace(/\s*(high\s*fl(oor)?|low\s*fl(oor)?)\s*$/i, '').trim();
 
@@ -269,13 +268,14 @@ function parsePhysicRoomMap(physicRoomMap, saleRoomMap, roomPopInfo) {
 
     const physicalRoomId = String(room.id);
     const extraBedDesc = getDescWithFallback(room);
+    const resolvedOcc = occupancyMap[physicalRoomId] || room.person || 2;
 
     rooms.push({
       roomName: room.name,
       bedText: room.bedInfo?.title || "",
       sizeText: room.areaInfo?.title || (room.area ? room.area + "㎡" : ""),
       facilityStr: extractFacilities((room.baseFacilityInfo || []).map(f => f.name).filter(Boolean)),
-      occupancy: occupancyMap[physicalRoomId] || room.person || 2,
+      occupancy: resolvedOcc,
       roomView: getRoomView(room.name),
       smoking: room.smokeInfo?.title ? (room.smokeInfo.title.toLowerCase().includes("non") ? "NO" : room.smokeInfo.title.toLowerCase().includes("smoking") ? "YES" : "") : "",
       windowType: room.windowInfo?.type ?? 0,
