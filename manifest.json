@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tera Assistant",
-  "version": "5.4",
+  "version": "5.5",
   "description": "Tera Assistant",
   "permissions": [
     "tabs",
@@ -23,7 +23,8 @@
     "https://tfhub.dev/*",
     "https://storage.googleapis.com/*",
     "https://www.agoda.com/*",
-    "https://*.agoda.net/*"
+    "https://*.agoda.net/*",
+    "https://accounts.google.com/*"
   ],
   "content_scripts": [
     {
@@ -33,6 +34,11 @@
       "world": "MAIN"
     }
   ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "action": {
     "default_icon": {
       "16": "icon.png",

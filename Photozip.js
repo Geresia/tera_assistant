@@ -5,11 +5,12 @@
   const TARGET_W = 1280, TARGET_H = 720;
   const MAX_W = 4096, MAX_H = 4096;
 
-  // Agoda 다운로더와 동일한 리사이즈 로직: 비율 필터 없이 전부 처리.
-  // - 작은 이미지는 TARGET 크기로 업스케일
-  // - 큰 이미지는 MAX 경계를 넘지 않게 다운스케일
-  // - 그 외(TARGET~MAX 사이)는 원본 그대로 사용
-  async function resizeBlob(blob) {
+  const RATIOS = [1, 1.5, 1.7778];
+  const FIT_THRESHOLD = 0.15;
+
+  // Auto crop/fit: if more than 15% would be cropped → Fit mode (transparent PNG)
+  // Otherwise → center Crop (JPEG)
+  async function processBlob(blob) {
     const url = URL.createObjectURL(blob);
     try {
       const img = await new Promise((resolve, reject) => {
@@ -19,32 +20,42 @@
         im.src = url;
       });
 
-      const w = img.naturalWidth, h = img.naturalHeight;
-      let targetW = w, targetH = h;
+      const sw = img.naturalWidth, sh = img.naturalHeight;
+      const curRatio = sw / sh;
+      const tgtRatio = RATIOS.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
 
-      if (w > MAX_W || h > MAX_H) {
-        const scale = Math.min(MAX_W / w, MAX_H / h);
-        targetW = Math.round(w * scale);
-        targetH = Math.round(h * scale);
-      } else if (w < TARGET_W && h < TARGET_H) {
-        const scale = Math.max(TARGET_W / w, TARGET_H / h);
-        targetW = Math.round(w * scale);
-        targetH = Math.round(h * scale);
-      }
+      let cropPercent = 0;
+      if (curRatio > tgtRatio) cropPercent = 1 - tgtRatio / curRatio;
+      else if (curRatio < tgtRatio) cropPercent = 1 - curRatio / tgtRatio;
+      const useFit = cropPercent > FIT_THRESHOLD;
 
-      if (targetW === w && targetH === h) return blob;
+      // Canvas base size (target ratio dimensions)
+      let sx = 0, sy = 0, cropW = sw, cropH = sh;
+      if (curRatio > tgtRatio) { cropW = Math.round(sh * tgtRatio); sx = Math.round((sw - cropW) / 2); }
+      else if (curRatio < tgtRatio) { cropH = Math.round(sw / tgtRatio); sy = Math.round((sh - cropH) / 2); }
+
+      let cw = cropW, ch = cropH;
+      if (cw > MAX_W || ch > MAX_H) { const s = Math.min(MAX_W / cw, MAX_H / ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
+      if (cw < TARGET_W && ch < TARGET_H) { const s = Math.max(TARGET_W / cw, TARGET_H / ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
 
       const canvas = document.createElement('canvas');
-      canvas.width = targetW;
-      canvas.height = targetH;
+      canvas.width = cw; canvas.height = ch;
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, targetW, targetH);
 
-      return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      if (useFit) {
+        const scale = Math.min(cw / sw, ch / sh);
+        const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+        const dx = Math.round((cw - dw) / 2), dy = Math.round((ch - dh) / 2);
+        ctx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      } else {
+        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      }
     } catch (e) {
-      console.log('[photoZip] resize 실패, 원본 사용:', e.message);
+      console.log('[photoZip] process 실패, 원본 사용:', e.message);
       return blob;
     } finally {
       URL.revokeObjectURL(url);
@@ -81,8 +92,9 @@
           const res = await fetch(hotelPhotos[i]);
           if (!res.ok) throw new Error(res.status);
           const blob = await res.blob();
-          const resized = await resizeBlob(blob);
-          hotelFolder.file(`${String(i + 1).padStart(2, '0')}.jpg`, resized);
+          const processed = await processBlob(blob);
+          const ext = processed.type === 'image/png' ? 'png' : 'jpg';
+          hotelFolder.file(`${String(i + 1).padStart(2, '0')}.${ext}`, processed);
           totalPhotos++;
         } catch (e) {
           failCount++;
@@ -104,8 +116,9 @@
           const res = await fetch(photos[i]);
           if (!res.ok) throw new Error(res.status);
           const blob = await res.blob();
-          const resized = await resizeBlob(blob);
-          roomFolder.file(`${String(i + 1).padStart(2, '0')}.jpg`, resized);
+          const processed = await processBlob(blob);
+          const ext = processed.type === 'image/png' ? 'png' : 'jpg';
+          roomFolder.file(`${String(i + 1).padStart(2, '0')}.${ext}`, processed);
           totalPhotos++;
         } catch (e) {
           failCount++;

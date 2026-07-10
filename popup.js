@@ -79,7 +79,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.4";
+const CURRENT_VERSION = "5.5";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -2305,27 +2305,38 @@ async function uploadRoomPhotos(tabId, base64List) {
         const imgUrl = URL.createObjectURL(blob);
         const img = new Image();
         await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = imgUrl; });
-        let sw = img.naturalWidth, sh = img.naturalHeight;
-        // 가장 가까운 허용 비율로 맞추기 (1:1, 3:2, 16:9)
+        const sw = img.naturalWidth, sh = img.naturalHeight;
         const curRatio = sw / sh;
-        const allowed = [1, 1.5, 1.7778];
-        const target = allowed.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
-        // center-crop 영역 계산
+        const RATIOS_U = [1, 1.5, 1.7778];
+        const tgtRatio = RATIOS_U.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
+
+        // Auto-detect: >15% crop → Fit mode (white background)
+        let cropPct = 0;
+        if (curRatio > tgtRatio) cropPct = 1 - tgtRatio / curRatio;
+        else if (curRatio < tgtRatio) cropPct = 1 - curRatio / tgtRatio;
+        const useFit = cropPct > 0.15;
+
         let sx = 0, sy = 0, cropW = sw, cropH = sh;
-        if (curRatio > target) { cropW = Math.round(sh * target); sx = Math.round((sw - cropW) / 2); }
-        else { cropH = Math.round(sw / target); sy = Math.round((sh - cropH) / 2); }
-        // 출력 크기 (4000 경계 제한)
+        if (curRatio > tgtRatio) { cropW = Math.round(sh * tgtRatio); sx = Math.round((sw - cropW) / 2); }
+        else if (curRatio < tgtRatio) { cropH = Math.round(sw / tgtRatio); sy = Math.round((sh - cropH) / 2); }
+
         let cw = cropW, ch = cropH;
         const MAXD = 4000;
-        if (cw > MAXD || ch > MAXD) {
-          const scale = Math.min(MAXD / cw, MAXD / ch);
-          cw = Math.round(cw * scale); ch = Math.round(ch * scale);
-        }
+        if (cw > MAXD || ch > MAXD) { const scale = Math.min(MAXD / cw, MAXD / ch); cw = Math.round(cw * scale); ch = Math.round(ch * scale); }
+
         const canvas = document.createElement('canvas');
         canvas.width = cw; canvas.height = ch;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        if (useFit) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, cw, ch);
+          const scale = Math.min(cw / sw, ch / sh);
+          const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+          ctx.drawImage(img, 0, 0, sw, sh, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
+        } else {
+          ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        }
         URL.revokeObjectURL(imgUrl);
         const jpgBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
         const file = new File([jpgBlob], 'photo.jpg', { type: 'image/jpeg' });
@@ -2433,10 +2444,16 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
         await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = imgUrl; });
         const sw = img.naturalWidth, sh = img.naturalHeight;
 
-        // 1) 가장 가까운 허용 비율로 center-crop
+        // 1) Auto-detect crop/fit
         const curRatio = sw / sh;
-        const RATIOS = [1, 1.5, 1.7778];
-        const tgtRatio = RATIOS.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
+        const RATIOS_H = [1, 1.5, 1.7778];
+        const tgtRatio = RATIOS_H.reduce((a, b) => Math.abs(b - curRatio) < Math.abs(a - curRatio) ? b : a);
+
+        let cropPct = 0;
+        if (curRatio > tgtRatio) cropPct = 1 - tgtRatio / curRatio;
+        else if (curRatio < tgtRatio) cropPct = 1 - curRatio / tgtRatio;
+        const useFit = cropPct > 0.15;
+
         let sx = 0, sy = 0, cropW = sw, cropH = sh;
         if (curRatio > tgtRatio) { cropW = Math.round(sh * tgtRatio); sx = Math.round((sw - cropW) / 2); }
         else if (curRatio < tgtRatio) { cropH = Math.round(sw / tgtRatio); sy = Math.round((sh - cropH) / 2); }
@@ -2445,15 +2462,22 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
         let cw = cropW, ch = cropH;
         if (cw > MAX_W || ch > MAX_H) { const s = Math.min(MAX_W / cw, MAX_H / ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
         if (cw < MIN_W || ch < MIN_H) { const s = Math.max(MIN_W / cw, MIN_H / ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
-        // Tera가 width=1280 이미지를 거부함 → 1281로 강제 업스케일
         if (cw <= 1280) { const s = 1281 / cw; cw = 1281; ch = Math.round(ch * s); }
-        console.log(`[hotel upload] original=${sw}x${sh} → canvas=${cw}x${ch}`);
+        console.log(`[hotel upload] original=${sw}x${sh} → canvas=${cw}x${ch} fit=${useFit}`);
 
         const canvas = document.createElement('canvas');
         canvas.width = cw; canvas.height = ch;
         const ctx2 = canvas.getContext('2d');
         ctx2.imageSmoothingEnabled = true; ctx2.imageSmoothingQuality = 'high';
-        ctx2.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        if (useFit) {
+          ctx2.fillStyle = '#ffffff';
+          ctx2.fillRect(0, 0, cw, ch);
+          const scale = Math.min(cw / sw, ch / sh);
+          const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+          ctx2.drawImage(img, 0, 0, sw, sh, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
+        } else {
+          ctx2.drawImage(img, sx, sy, cropW, cropH, 0, 0, cw, ch);
+        }
         URL.revokeObjectURL(imgUrl);
 
         // 3) 최소 300KB: 품질 올려서 재시도, 그래도 안 되면 1.5배 업스케일

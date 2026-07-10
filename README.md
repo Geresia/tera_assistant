@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-5.4-blue)
+![Version](https://img.shields.io/badge/version-5.5-blue)
 ![Chrome Extension](https://img.shields.io/badge/Chrome-MV3-green)
 ![JavaScript](https://img.shields.io/badge/JavaScript-91%25-yellow)
 ![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-MobileNet-orange)
@@ -91,6 +91,7 @@ Double click `Tera_Update.bat` in the `tera_assistant` folder, then reload the e
 ---
 
 ## Version History
+- **5.5** - Auto Crop/Fit detection for photo processing: images where more than 15% would be cropped automatically switch to Fit mode (white background, preserves full image). Applied to ZIP download and TERA photo upload.
 - **5.4** - Agoda Hotel Detail Insert improvements: built year from usefulInfo ("Year property opened"), renovated year fallback to built year, facilities via full page text, breakfast charge regex fixed for KRW/₩ formats with field clear when not found, airport transfer free -> 0, BelowFold API direct fetch fallback, local name/address No radio when Korean data unavailable. Agoda room description left empty.
 - **5.3** - Added Agoda support: Hotel Detail Insert and room scan/fill for Agoda hotel pages. Intercepts room-grid, graphql/property, and BelowFoldParams APIs via agoda_main.js content script injected at document_start.
 - **5.0** - Rebranded to Tera Assistant. Merged Hotel Info Extractor into Room Scraper. Added Hotel Info section with Extract and Sheet buttons. UI redesigned with clean flat layout and KR/EN language toggle. Switched to Side Panel. Added hotel-level facility extraction, local name, address, check-in/out, parking, breakfast, airport transfer, voltage auto-fill support. Added hotel photo upload to Tera (hotel-photo page). AI-based room photo classification using MobileNet. 401 error handling with auto-retry countdown and Retry Now button. Hotel photo limit of 10.
