@@ -57,7 +57,7 @@ const STRINGS = {
     hotelAutofillOverview: "Filling Overview...",
     hotelAutofillAddress: "Filling Address...",
     hotelAutofillDone: "Done!",
-    hotelAutofillReload: "Page reloaded — please try again.",
+    hotelAutofillReload: "Page reloaded - please try again.",
   }
 };
 
@@ -356,7 +356,7 @@ function waitForContinue(roomName, isError = false) {
     const msgEl = document.getElementById('pauseMsg');
     const btn = document.getElementById('continueBtn');
     msgEl.textContent = isError
-      ? (currentLang === 'kr' ? `${roomName} — 에러가 있습니다. 수정 후 continue을 눌러주세요.` : `${roomName} — Error detected. Fix it, then click Continue.`)
+      ? (currentLang === 'kr' ? `${roomName} - 에러가 있습니다. 수정 후 continue을 눌러주세요.` : `${roomName} - Error detected. Fix it, then click Continue.`)
       : (currentLang === 'kr' ? `${roomName} 더블 체크 후 continue을 눌러주세요.` : `${roomName} Double check, then click Continue.`);
     msgEl.style.color = isError ? '#d93025' : '';
     box.style.display = 'block';
@@ -384,7 +384,7 @@ function askBedMerge(groupName, rooms) {
   return new Promise(resolve => {
     const box = document.getElementById('bedMergeBox');
     const listEl = document.getElementById('bedMergeList');
-    document.getElementById('bedMergeGroupName').textContent = `"${groupName}" — ${rooms.length}종`;
+    document.getElementById('bedMergeGroupName').textContent = `"${groupName}" - ${rooms.length}종`;
     const grpOptions = ['Room 1', 'Room 2', 'Room 3', 'Separate'];
     listEl.innerHTML = rooms.map((r, i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid #f0f0f5;">
@@ -393,7 +393,7 @@ function askBedMerge(groupName, rooms) {
           ${grpOptions.map(g => `<option value="${g}">${g}</option>`).join('')}
         </select>
         <div style="min-width:0;">
-          <div style="font-size:12px;font-weight:500;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.bedText || '—'}</div>
+          <div style="font-size:12px;font-weight:500;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.bedText || '-'}</div>
           <div style="font-size:11px;color:#aeaeb2;">${[r.sizeText ? r.sizeText + ' sqm' : '', r.occupancy || '', r.priceText || ''].filter(Boolean).join(' · ')}</div>
         </div>
       </div>
@@ -1578,7 +1578,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
         for (const [sym, cur] of symbolMap) { if (priceText.includes(sym)) { currency = cur; break; } }
 
         // Address
-        // JSON-LD (Schema.org) — most reliable source for address, GPS, stars
+        // JSON-LD (Schema.org) - most reliable source for address, GPS, stars
         let address = '', lat = '', lng = '', starRating = '0';
         for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
           try {
@@ -1634,7 +1634,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
         else if (/capsule/.test(n)) accommodationType = 'CAPSULE_HOTEL';
         else if (/guesthouse|guest house/.test(n)) accommodationType = 'GUESTHOUSE';
 
-        // Hotel Bulk Insert — hotel-level facility codes only
+        // Hotel Bulk Insert - hotel-level facility codes only
         const fmap = [
           {keywords:['24-hour front desk','front desk [24-hour]','24 hour front desk'],code:'HAS_24_HOUR_FRONT_DESK'},
           {keywords:['wi-fi in public','wi-fi in all rooms','free wi-fi','wi-fi [free]','wifi in public'],code:'WIFI_PUBLIC_AREA'},
@@ -2593,7 +2593,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // Wait for "Upload" button (orange) — up to 60s for slow networks
+        // Wait for "Upload" button (orange) - up to 60s for slow networks
         let uploadBtn = null;
         for (let k = 0; k < 500; k++) {
           await delay(120);
@@ -2604,7 +2604,7 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
         }
         if (!uploadBtn) return { ok: false, reason: 'no-upload-btn' };
         uploadBtn.click();
-        // Wait for Upload button to disappear (upload complete) — up to 30s
+        // Wait for Upload button to disappear (upload complete) - up to 30s
         for (let k = 0; k < 250; k++) {
           await delay(120);
           if (!Array.from(document.querySelectorAll('button span')).find(s => s.textContent.trim() === 'Upload')) break;
@@ -2626,8 +2626,8 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
       if (code !== null && code !== undefined) break;
     }
     const statusMsg = code === 200
-      ? (currentLang === 'kr' ? `Photo ${i + 1} 완료 — complete` : `Photo ${i + 1} complete`)
-      : (currentLang === 'kr' ? `Photo ${i + 1} 실패 — failed (${code ?? 'no response'})` : `Photo ${i + 1} failed (${code ?? 'no response'})`);
+      ? (currentLang === 'kr' ? `Photo ${i + 1} 완료 - complete` : `Photo ${i + 1} complete`)
+      : (currentLang === 'kr' ? `Photo ${i + 1} 실패 - failed (${code ?? 'no response'})` : `Photo ${i + 1} failed (${code ?? 'no response'})`);
     setTeraStatus(statusMsg, code === 200 ? '' : 'error');
     if (code !== 200) {
       await sleep(1500);
@@ -2635,8 +2635,8 @@ async function uploadHotelPhotosToTera(tabId, base64List) {
       const teraEl = document.getElementById("teraStatus");
       const showCountdown = (s) => {
         const msg = currentLang === 'kr'
-          ? `Photo ${i + 1} 오류 (${code ?? 'no response'}) — ${s}초 후 재시도...`
-          : `Photo ${i + 1} error (${code ?? 'no response'}) — retrying in ${s}s...`;
+          ? `Photo ${i + 1} 오류 (${code ?? 'no response'}) - ${s}초 후 재시도...`
+          : `Photo ${i + 1} error (${code ?? 'no response'}) - retrying in ${s}s...`;
         teraEl.innerHTML = `${msg} <button id="retryNowBtn" style="margin-left:6px;padding:2px 8px;font-size:11px;border-radius:6px;background:#0071e3;color:#fff;border:none;cursor:pointer;">Retry now</button>`;
         teraEl.className = "status error";
         const btn = document.getElementById("retryNowBtn");
