@@ -1992,8 +1992,8 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
     if (hotelSel === 'failed') {
       setExtractStatus(
         currentLang === 'kr'
-          ? `⚠️ "${currentHotelData.name_en}" 을 찾지 못했어요. 직접 선택 후 다시 눌러주세요.`
-          : `⚠️ "${currentHotelData.name_en}" not found. Select it manually then click again.`,
+          ? `"${currentHotelData.name_en}" 을 찾지 못했어요. 직접 선택 후 다시 눌러주세요.`
+          : `"${currentHotelData.name_en}" not found. Select it manually then click again.`,
         "error"
       );
       btn.disabled = false;
