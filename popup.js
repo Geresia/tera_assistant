@@ -1297,69 +1297,6 @@ const fetchLocalData = async (hotelId, locale) => {
   } catch (e) { return null; }
 };
 
-// ── Tera Hotel Selection ──
-async function selectTeraHotel(tabId, hotelName) {
-  // Check if already on the correct hotel
-  const checkRes = await exec(tabId, (targetName) => {
-    const nameEl = document.querySelector('span.css-1u6drzy');
-    const current = nameEl?.textContent?.trim() || '';
-    const normalize = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!current) return 'unknown';
-    const matchLen = Math.min(normalize(targetName).length, 10);
-    return normalize(current).includes(normalize(targetName).slice(0, matchLen)) ? 'match' : 'mismatch';
-  }, [hotelName]);
-
-  if (checkRes?.[0]?.result === 'match' || checkRes?.[0]?.result === 'unknown') return 'ok';
-
-  // Open dropdown
-  await exec(tabId, () => {
-    document.querySelector('[data-testid="hotel-list-dropdown"]')?.click();
-  });
-  await sleep(400);
-
-  // Fill search input
-  await exec(tabId, (name) => {
-    const input = document.querySelector('input[placeholder*="accommodation"]');
-    if (!input) return;
-    input.focus();
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    setter.call(input, name);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [hotelName]);
-
-  await sleep(1500);
-
-  // Click matching result
-  const clicked = await exec(tabId, async (name) => {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const normalize = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const tgt = normalize(name).slice(0, 12);
-
-    for (let i = 0; i < 10; i++) {
-      for (const el of document.querySelectorAll('[role="option"]')) {
-        if (normalize(el.textContent).includes(tgt)) { el.click(); return true; }
-      }
-      const dd = document.querySelector('[data-testid="hotel-list-dropdown"]');
-      if (dd) {
-        for (const el of dd.querySelectorAll('div[class], span[class], li')) {
-          const text = el.textContent?.trim() || '';
-          if (text.length > 3 && text.length < 200 && el.children.length <= 4 && normalize(text).includes(tgt)) {
-            el.click();
-            return true;
-          }
-        }
-      }
-      await sleep(300);
-    }
-    return false;
-  }, [hotelName]);
-
-  if (!clicked?.[0]?.result) return 'failed';
-  await sleep(800);
-  return 'switched';
-}
-
 // ── Tera Hotel Autofill ──
 async function dismissLeaveModalIfPresent(tabId) {
   const r = await exec(tabId, () => {
@@ -1986,20 +1923,6 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
   if (tab.url?.includes("tera.traveloka.com")) {
     if (!currentHotelData) { setExtractStatus(t().hotelInsertNoData, "error"); return; }
     btn.disabled = true;
-
-    setExtractStatus(currentLang === 'kr' ? '호텔 확인 중...' : 'Checking hotel...');
-    const hotelSel = await selectTeraHotel(tab.id, currentHotelData.name_en);
-    if (hotelSel === 'failed') {
-      setExtractStatus(
-        currentLang === 'kr'
-          ? `"${currentHotelData.name_en}" 을 찾지 못했어요. 직접 선택 후 다시 눌러주세요.`
-          : `"${currentHotelData.name_en}" not found. Select it manually then click again.`,
-        "error"
-      );
-      btn.disabled = false;
-      return;
-    }
-    if (hotelSel === 'switched') await sleep(500);
 
     await exec(tab.id, () => {
       Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Details")?.click();
