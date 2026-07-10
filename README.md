@@ -11,7 +11,7 @@
 
 **Chrome Extension for Traveloka TERA hotel data automation**
 
-Extracts hotel and room data from Trip.com and Agoda, and automatically fills it into [tera.traveloka.com](https://tera.traveloka.com) — including photos, facilities, bed types, and more.
+Extracts hotel and room data from Trip.com and Agoda, and automatically fills it into [tera.traveloka.com](https://tera.traveloka.com) - including photos, facilities, bed types, and more.
 
 </div>
 
@@ -36,9 +36,9 @@ Extracts hotel and room data from Trip.com and Agoda, and automatically fills it
 
 ### Smart Photo Processing
 Photos are automatically processed before download or upload:
-- **Auto Crop/Fit detection** — if more than 15% of the image would be cropped to reach the target ratio (`1:1` `3:2` `16:9`), switches to Fit mode instead
-- **Crop mode** — center-crops to target ratio → JPEG
-- **Fit mode** — scales to fit with white background → JPEG (upload) / transparent → PNG (ZIP)
+- **Auto Crop/Fit detection** - if more than 15% of the image would be cropped to reach the target ratio (`1:1` `3:2` `16:9`), switches to Fit mode instead
+- **Crop mode** - center-crops to target ratio → JPEG
+- **Fit mode** - scales to fit with white background → JPEG (upload) / transparent → PNG (ZIP)
 - Output capped between `1280×720` and `4096×4096`
 
 ### AI Photo Classification
@@ -63,7 +63,7 @@ Falls back to a manual prompt if any step fails.
 
 ## Installation
 
-**Step 1 — Download**
+**Step 1 - Download**
 
 Open PowerShell and run:
 
@@ -71,7 +71,7 @@ Open PowerShell and run:
 $d="$env:USERPROFILE\Desktop\tera_assistant"; mkdir $d -Force; iwr "https://raw.githubusercontent.com/Geresia/tera_assistant/main/update.ps1" -OutFile "$d\update.ps1"; iwr "https://raw.githubusercontent.com/Geresia/tera_assistant/main/Tera_Update.bat" -OutFile "$d\Tera_Update.bat"; powershell -ExecutionPolicy Bypass -File "$d\update.ps1"
 ```
 
-**Step 2 — Load in Chrome**
+**Step 2 - Load in Chrome**
 
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
@@ -134,11 +134,11 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ## Version History
 
-- **5.5** — Auto Crop/Fit detection for photo processing (>15% crop threshold → Fit mode). Auto-login on Tera `/login/` redirect with Google Workspace SSO + account chooser automation. Traveloka icon.
-- **5.4** — Agoda Hotel Detail Insert: built year from `usefulInfo`, renovated year fallback, facilities via full-page text, breakfast KRW/₩ regex fix, airport transfer `free → 0`, `BelowFold` API direct fetch fallback, Korean name/address `No` radio fallback. Room description left empty.
-- **5.3** — Agoda support: Hotel Detail Insert + room scan/fill. API interception via `agoda_main.js` (`room-grid`, `graphql/property`, `BelowFoldParams`).
-- **5.0** — Rebranded to Tera Assistant. Side Panel UI, KR/EN toggle, hotel-level auto-fill (facilities, local name, address, check-in/out, parking, breakfast, airport transfer, voltage). Hotel photo upload. MobileNet AI photo classification. 401 auto-retry with countdown.
-- **4.0** — Migrated to Trip.com API (`physicRoomMap` + `getHotelDetailAggregate`). Works on all regional Trip.com domains.
-- **3.0** — ZIP photo download. Language toggle. Auto-expand hidden room types.
-- **2.0** — Migrated from bookmarklet to Chrome Extension.
-- **1.0** — Initial release as a browser bookmarklet.
+- **5.5** - Auto Crop/Fit detection for photo processing (>15% crop threshold → Fit mode). Auto-login on Tera `/login/` redirect with Google Workspace SSO + account chooser automation. Traveloka icon.
+- **5.4** - Agoda Hotel Detail Insert: built year from `usefulInfo`, renovated year fallback, facilities via full-page text, breakfast KRW/₩ regex fix, airport transfer `free → 0`, `BelowFold` API direct fetch fallback, Korean name/address `No` radio fallback. Room description left empty.
+- **5.3** - Agoda support: Hotel Detail Insert + room scan/fill. API interception via `agoda_main.js` (`room-grid`, `graphql/property`, `BelowFoldParams`).
+- **5.0** - Rebranded to Tera Assistant. Side Panel UI, KR/EN toggle, hotel-level auto-fill (facilities, local name, address, check-in/out, parking, breakfast, airport transfer, voltage). Hotel photo upload. MobileNet AI photo classification. 401 auto-retry with countdown.
+- **4.0** - Migrated to Trip.com API (`physicRoomMap` + `getHotelDetailAggregate`). Works on all regional Trip.com domains.
+- **3.0** - ZIP photo download. Language toggle. Auto-expand hidden room types.
+- **2.0** - Migrated from bookmarklet to Chrome Extension.
+- **1.0** - Initial release as a browser bookmarklet.
