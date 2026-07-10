@@ -22,7 +22,7 @@ Extracts hotel and room data from Trip.com and Agoda, and automatically fills it
 ### Hotel Info
 | Feature | Source | What it fills |
 |---|---|---|
-| **Hotel Bulk Insert** | Trip.com | Details, Overview, Address tabs |
+| **Hotel Bulk Insert** | Trip.com / Agoda | Details, Overview, Address tabs |
 | **Hotel Detail Insert** | Trip.com / Agoda | Check-in/out, room count, floors, facilities, breakfast, airport transfer, built year, local name & address |
 
 ### Room Management
