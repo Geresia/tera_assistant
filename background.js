@@ -16,7 +16,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
   if (!tab.url?.startsWith('https://accounts.google.com/')) return;
-  if (!tab.url.includes('traveloka')) return;
+  if (!tab.url.includes('tera.traveloka.com')) return;
   chrome.scripting.executeScript({
     target: { tabId },
     files: ['google_account.js'],
