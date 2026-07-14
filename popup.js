@@ -1323,6 +1323,9 @@ async function runHotelAutofill(tabId) {
     const results = await exec(tabId, hotelDetailsScript, [currentHotelData]);
     const res = results?.[0]?.result || [];
     if (res.find(r => r.field === "Reload")) { setExtractStatus(t().hotelAutofillReload, "error"); return; }
+    // React 상태 처리 후 저장 버튼 재클릭 (hotelDetailsScript 내 클릭이 너무 빠를 수 있음)
+    await sleep(800);
+    await exec(tabId, () => document.querySelector('button.c-btn--variant-orange span')?.closest('button').click());
     await sleep(2500);
     await dismissLeaveModalIfPresent(tabId);
 
