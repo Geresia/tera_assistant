@@ -79,7 +79,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.5";
+const CURRENT_VERSION = "5.51";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -1323,10 +1323,10 @@ async function runHotelAutofill(tabId) {
     const results = await exec(tabId, hotelDetailsScript, [currentHotelData]);
     const res = results?.[0]?.result || [];
     if (res.find(r => r.field === "Reload")) { setExtractStatus(t().hotelAutofillReload, "error"); return; }
-    // React 상태 처리 후 저장 버튼 재클릭 (hotelDetailsScript 내 클릭이 너무 빠를 수 있음)
+    // React 상태 처리 후 저장 버튼 재클릭, 저장 완료까지 충분히 대기
     await sleep(800);
     await exec(tabId, () => document.querySelector('button.c-btn--variant-orange span')?.closest('button').click());
-    await sleep(2500);
+    await sleep(4000);
     await dismissLeaveModalIfPresent(tabId);
 
     // Facilities 탭

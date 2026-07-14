@@ -1,6 +1,6 @@
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-5.5-0EA5E9?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-5.51-0EA5E9?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)
@@ -134,6 +134,7 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ## Version History
 
+- **5.51** - Details save reliability fix (re-click after React state settles). Google account auto-selection removed (scope too broad). Traveloka bird favicon for extension icon.
 - **5.5** - Auto Crop/Fit detection for photo processing (>15% crop threshold → Fit mode). Auto-login on Tera `/login/` redirect with Google Workspace SSO + account chooser automation. Traveloka icon.
 - **5.4** - Agoda Hotel Detail Insert: built year from `usefulInfo`, renovated year fallback, facilities via full-page text, breakfast KRW/₩ regex fix, airport transfer `free → 0`, `BelowFold` API direct fetch fallback, Korean name/address `No` radio fallback. Room description left empty.
 - **5.3** - Agoda support: Hotel Detail Insert + room scan/fill. API interception via `agoda_main.js` (`room-grid`, `graphql/property`, `BelowFoldParams`).
