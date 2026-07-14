@@ -122,13 +122,13 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 | `popup.html` / `popup.js` | Side Panel UI and all automation logic |
 | `content.js` | Trip.com room & hotel photo scraper |
 | `agoda_main.js` | Agoda API interceptor (injected at `document_start`, `world: MAIN`) |
-| `background.js` | Side Panel launcher + auto-login trigger |
-| `tera_login.js` | Auto-login script for `tera.traveloka.com/login/` |
+| `background.js` | Side Panel launcher + auto login trigger |
+| `tera_login.js` | Auto login script for `tera.traveloka.com/login/` |
 | `google_account.js` | Google account chooser automation |
 | `Photozip.js` | ZIP photo download with auto Crop/Fit processing |
 | `jszip.min.js` | ZIP library |
 | `tf.min.js` / `mobilenet.min.js` / `imagenet_labels.json` | AI photo classification |
-| `Tera_Update.bat` / `update.ps1` | One-click updater |
+| `Tera_Update.bat` / `update.ps1` | One click updater |
 
 ---
 
