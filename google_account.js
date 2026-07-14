@@ -1,6 +1,6 @@
 (async () => {
   // Only activate during Traveloka OAuth flow
-  if (!location.href.includes('tera.traveloka.com') && !document.referrer.includes('tera.traveloka.com')) return;
+  if (!location.href.includes('traveloka')) return;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
