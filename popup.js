@@ -79,7 +79,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.52";
+const CURRENT_VERSION = "5.51";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -464,9 +464,6 @@ function parseAgodaRooms(data) {
     const occupancyAttrs = room.offers?.[0]?.occupancyItems?.[0]?.dataAttributes || {};
     const maxAdults = parseInt(occupancyAttrs['data-adults']) || 2;
     const occupancy = maxAdults + ' adults';
-    const description = room.description
-      || (room.features || []).find(f => /desc|about|summary/i.test(f.type || ''))?.text
-      || '';
     seen.set(room.typeId, {
       roomName: room.name,
       bedText,
@@ -476,8 +473,6 @@ function parseAgodaRooms(data) {
       priceText,
       occupancy,
       maxAdults,
-      source: 'agoda',
-      description,
       extraBedDesc: "",
     });
   }
@@ -594,9 +589,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
     setter.call(el, desc);
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [room.source === 'agoda'
-    ? (room.description || '')
-    : (typeof room.extraBedDesc === 'string' ? room.extraBedDesc : "Extra beds and cribs are unavailable for this room type")]);
+  }, [typeof room.extraBedDesc === 'string' ? room.extraBedDesc : "Extra beds and cribs are unavailable for this room type"]);
   await sleep(200);
 
   await exec(tabId, () => {
