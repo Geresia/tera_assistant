@@ -302,7 +302,7 @@ function renderHotelPreview(data) {
 }
 
 // ── Constants ──
-const CURRENT_VERSION = "5.5";
+const CURRENT_VERSION = "5.51";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
