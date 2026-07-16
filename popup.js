@@ -79,7 +79,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.51";
+const CURRENT_VERSION = "5.5";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -371,7 +371,7 @@ async function checkForUpdates() {
     const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
-      const banner = document.getElementById('updateBanner');
+      const modal = document.getElementById('updateModal');
       document.getElementById('updateVersion').textContent = `v${data.version}`;
 
       const img = document.getElementById('updateImage');
@@ -380,9 +380,9 @@ async function checkForUpdates() {
       document.getElementById('updateChangelog').textContent =
         data.changelog || `Version ${data.version} is available.`;
 
-      banner.style.display = 'block';
+      modal.classList.add('open');
 
-      document.getElementById('updateDismissBtn').onclick = () => { banner.style.display = 'none'; };
+      document.getElementById('updateDismissBtn').onclick = () => { modal.classList.remove('open'); };
       document.getElementById('updateHowBtn').onclick = () => {
         alert('tera_assistant 폴더에서 Tera_Update.bat 를 더블클릭 하세요.\nThen reload the extension at chrome://extensions');
       };
