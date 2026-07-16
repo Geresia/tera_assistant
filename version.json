@@ -3,7 +3,7 @@
   "changelog": "",
   "notes": [
     {
-      "image": "https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.51.png",
+      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.51.png"],
       "title": "Room Scan Preview with Edit",
       "text": "Click ✎ on any room to edit name, bed type, size, and occupancy before filling.\nMulti-bed support (e.g. 1 Double and 3 Single) shown as separate rows."
     }

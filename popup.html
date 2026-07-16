@@ -406,13 +406,22 @@
     .update-actions { display: flex; gap: 8px; }
     /* Notes slide view */
     #updateNoteView { display: none; }
-    #updateNoteImage {
+    #updateNoteImages {
+      display: none;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    #updateNoteImages.single { display: flex; flex-direction: column; }
+    #updateNoteImages.multi { display: grid; grid-template-columns: 1fr 1fr; }
+    #updateNoteImages img {
       width: 100%;
       border-radius: 8px;
-      margin-bottom: 10px;
       border: 0.5px solid #d1d1d6;
-      display: none;
+      object-fit: cover;
+      cursor: zoom-in;
     }
+    #updateNoteImages.single img { max-height: 400px; object-fit: contain; }
+    #updateNoteImages.multi img { max-height: 160px; }
     #updateNoteTitle {
       font-size: 13px;
       font-weight: 600;
@@ -506,7 +515,7 @@
           <span class="update-version" id="updateNoteVersion"></span>
           <button id="updateBackBtn" style="background:none;border:none;font-size:16px;color:#86868b;cursor:pointer;padding:0 0 0 8px;line-height:1;font-family:inherit;">✕</button>
         </div>
-        <img id="updateNoteImage" alt="" style="width:100%;max-height:400px;object-fit:contain;border-radius:8px;margin-bottom:10px;border:0.5px solid #d1d1d6;display:none;cursor:zoom-in;">
+        <div id="updateNoteImages"></div>
         <p id="updateNoteTitle"></p>
         <p id="updateNoteText"></p>
         <div class="note-nav">

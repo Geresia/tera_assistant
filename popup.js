@@ -390,13 +390,25 @@ async function checkForUpdates() {
 
       const showPage = (idx) => {
         const note = notes[idx];
-        const img = document.getElementById('updateNoteImage');
-        if (note.image) { img.src = note.image; img.style.display = 'block'; }
-        else { img.style.display = 'none'; }
-        img.onclick = note.image ? () => {
-          document.getElementById('imgLightboxImg').src = note.image;
-          document.getElementById('imgLightbox').classList.add('open');
-        } : null;
+        const imgUrls = Array.isArray(note.images) && note.images.length
+          ? note.images
+          : note.image ? [note.image] : [];
+        const container = document.getElementById('updateNoteImages');
+        container.innerHTML = '';
+        if (imgUrls.length) {
+          container.className = imgUrls.length === 1 ? 'single' : 'multi';
+          imgUrls.forEach(url => {
+            const el = document.createElement('img');
+            el.src = url; el.alt = '';
+            el.onclick = () => {
+              document.getElementById('imgLightboxImg').src = url;
+              document.getElementById('imgLightbox').classList.add('open');
+            };
+            container.appendChild(el);
+          });
+        } else {
+          container.className = '';
+        }
         const titleEl = document.getElementById('updateNoteTitle');
         titleEl.textContent = note.title || '';
         titleEl.style.display = note.title ? 'block' : 'none';
