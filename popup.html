@@ -321,6 +321,72 @@
     }
     .bed-add-btn:hover { border-color: #0071e3; color: #0071e3; }
 
+    /* Hotel Preview */
+    #hotelPreview {
+      display: none;
+      margin-top: 8px;
+      border: 0.5px solid #e5e5ea;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .hotel-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .hotel-preview-row:hover { background: #f5f5f7; }
+    .hotel-preview-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1d1d1f;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hotel-preview-meta {
+      font-size: 11px;
+      color: #aeaeb2;
+      padding: 0 12px 8px;
+    }
+    .hotel-edit-panel {
+      display: none;
+      padding: 10px 12px 12px;
+      background: #f5f5f7;
+      border-top: 0.5px solid #ececec;
+    }
+    .hotel-edit-panel.open { display: block; }
+    .hotel-edit-group { margin-bottom: 8px; }
+    .hotel-edit-group:last-child { margin-bottom: 0; }
+    .hotel-edit-group-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #aeaeb2;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+    .hotel-edit-row { display: flex; gap: 6px; align-items: center; }
+    .hotel-edit-row .room-edit-input { flex: 1; }
+    .hotel-toggle-wrap { display: flex; gap: 4px; }
+    .hotel-toggle-btn {
+      padding: 3px 10px;
+      font-size: 10px;
+      font-weight: 500;
+      border: 0.5px solid #d1d1d6;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      color: #1d1d1f;
+      font-family: inherit;
+      transition: all 0.1s;
+    }
+    .hotel-toggle-btn:hover { background: #e5e5ea; }
+    .hotel-toggle-btn.active { background: #0071e3; color: #fff; border-color: #0071e3; }
+
     /* Pause Box */
     #pauseBox {
       display: none;
@@ -537,6 +603,7 @@
       <button class="btn-dark" id="sheetBtn">Hotel Detail Insert</button>
     </div>
     <div id="extractStatus" class="status"></div>
+    <div id="hotelPreview"></div>
   </div>
 
   <div class="divider"></div>

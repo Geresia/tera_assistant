@@ -78,6 +78,139 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
   }
 });
 
+// ── Utils ──
+const escHtml = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function renderHotelPreview(data) {
+  const container = document.getElementById('hotelPreview');
+  if (!data) { container.style.display = 'none'; container.innerHTML = ''; return; }
+
+  const checkinDisplay = data.front_desk_hours === 'Yes'
+    ? `${data.checkin_time || '--'} → ${data.checkout_time || '--'}`
+    : `${data.checkin_time || '--'}~${data.checkin_end || '--'} / ${data.checkout_start || '--'}~${data.checkout_time || '--'}`;
+  const metaParts = [
+    checkinDisplay,
+    data.built_year && data.built_year !== '1' ? `Built ${data.built_year}` : null,
+    data.room_count ? `${data.room_count} rooms` : null,
+  ].filter(Boolean);
+
+  const pkNo = !data.parking || data.parking === 'No';
+  const pkFree = data.parking === 'Free' || data.parking_type === 'Free';
+  const pkPaid = !pkNo && !pkFree;
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="hotel-preview-row" id="hotelEditToggle">
+      <span class="hotel-preview-name">${escHtml(data.name_en || 'Hotel')}</span>
+      <button class="room-edit-btn" title="Edit">✎</button>
+    </div>
+    <div class="hotel-preview-meta">${escHtml(metaParts.join('  ·  '))}</div>
+    <div class="hotel-edit-panel" id="hotelEditPanel">
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Name</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-name-en" placeholder="English" value="${escHtml(data.name_en || '')}">
+          <input class="room-edit-input" id="hf-name-local" placeholder="Local" value="${escHtml(data.name_local || '')}">
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Address</div>
+        <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-address" value="${escHtml(data.address || '')}">
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Check-in / Check-out</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-checkin" placeholder="14:00" value="${escHtml(data.checkin_time || '')}">
+          <span style="color:#aeaeb2;font-size:11px;flex-shrink:0;">→</span>
+          <input class="room-edit-input" id="hf-checkout" placeholder="12:00" value="${escHtml(data.checkout_time || '')}">
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">24hr Front Desk</div>
+        <div class="hotel-toggle-wrap">
+          <button class="hotel-toggle-btn${data.front_desk_hours === 'Yes' ? ' active' : ''}" data-key="front_desk_hours" data-val="Yes">Yes</button>
+          <button class="hotel-toggle-btn${data.front_desk_hours !== 'Yes' ? ' active' : ''}" data-key="front_desk_hours" data-val="No">No</button>
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Built / Renovated</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-built" placeholder="Built year" value="${escHtml(data.built_year || '')}">
+          <input class="room-edit-input" id="hf-renovated" placeholder="Renovated year" value="${escHtml(data.renovated_year || '')}">
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Rooms / Floors</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-rooms" placeholder="Rooms" value="${escHtml(data.room_count || '')}">
+          <input class="room-edit-input" id="hf-floors" placeholder="Floors" value="${escHtml(data.floor_count || '')}">
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Room Service</div>
+        <div class="hotel-toggle-wrap">
+          <button class="hotel-toggle-btn${data.room_service === 'Yes' ? ' active' : ''}" data-key="room_service" data-val="Yes">Yes</button>
+          <button class="hotel-toggle-btn${data.room_service !== 'Yes' ? ' active' : ''}" data-key="room_service" data-val="No">No</button>
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Parking</div>
+        <div class="hotel-toggle-wrap" id="hf-parking-wrap">
+          <button class="hotel-toggle-btn${pkNo ? ' active' : ''}" data-parking="No">No</button>
+          <button class="hotel-toggle-btn${pkFree ? ' active' : ''}" data-parking="Free">Free</button>
+          <button class="hotel-toggle-btn${pkPaid ? ' active' : ''}" data-parking="Paid">Paid</button>
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Airport Transfer</div>
+        <div class="hotel-toggle-wrap">
+          <button class="hotel-toggle-btn${data.airport_transfer === 'Yes' ? ' active' : ''}" data-key="airport_transfer" data-val="Yes">Yes</button>
+          <button class="hotel-toggle-btn${data.airport_transfer !== 'Yes' ? ' active' : ''}" data-key="airport_transfer" data-val="No">No</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('hotelEditToggle').addEventListener('click', () => {
+    document.getElementById('hotelEditPanel').classList.toggle('open');
+  });
+
+  const bindInput = (id, key) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', e => { currentHotelData[key] = e.target.value; });
+  };
+  bindInput('hf-name-en', 'name_en');
+  bindInput('hf-name-local', 'name_local');
+  bindInput('hf-address', 'address');
+  bindInput('hf-checkin', 'checkin_time');
+  bindInput('hf-checkout', 'checkout_time');
+  bindInput('hf-built', 'built_year');
+  bindInput('hf-renovated', 'renovated_year');
+  bindInput('hf-rooms', 'room_count');
+  bindInput('hf-floors', 'floor_count');
+
+  container.querySelectorAll('.hotel-toggle-btn[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      currentHotelData[key] = btn.dataset.val;
+      container.querySelectorAll(`.hotel-toggle-btn[data-key="${key}"]`).forEach(b => {
+        b.classList.toggle('active', b.dataset.val === btn.dataset.val);
+      });
+    });
+  });
+
+  document.getElementById('hf-parking-wrap').querySelectorAll('.hotel-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.parking;
+      currentHotelData.parking = val === 'No' ? 'No' : val;
+      if (val !== 'No') currentHotelData.parking_type = val;
+      document.getElementById('hf-parking-wrap').querySelectorAll('.hotel-toggle-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.parking === val);
+      });
+    });
+  });
+}
+
 // ── Constants ──
 const CURRENT_VERSION = "5.5";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
@@ -1795,6 +1928,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     await processApiData(data, apiData);
 
     currentHotelData = data;
+    renderHotelPreview(data);
     setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
 
     // Sheet 전송
@@ -2055,6 +2189,7 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       const apiData = await fetchLocalData(data._hotelId, locale);
       await processApiData(data, apiData);
       currentHotelData = data;
+      renderHotelPreview(data);
       setExtractStatus(t().extractDone(data.name_en || (currentLang === 'kr' ? '호텔' : 'Hotel')), "success");
 
       await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
@@ -2081,6 +2216,7 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
       const data = results?.[0]?.result;
       if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
       currentHotelData = data;
+      renderHotelPreview(data);
       setExtractStatus(t().extractDone(data.name_en), "success");
       await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
       setExtractStatus(
@@ -2141,6 +2277,7 @@ document.querySelectorAll('.person-btn').forEach(btn => {
 // Reset
 document.getElementById("resetBtn").addEventListener("click", () => {
   currentHotelData = null;
+  renderHotelPreview(null);
   roomData = [];
   chrome.storage.session.remove('roomData');
   setStatus(t().defaultStatus);
