@@ -5,7 +5,7 @@
     {
       "image": "https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.51.png",
       "title": "Room Scan Preview with Edit",
-      "text": "Fill 전에 스캔된 방 데이터를 미리 확인하고 수정할 수 있어요.\n✎ 버튼으로 이름, 침대 타입, 크기, 인원을 바로 편집하고, 1 Double + 3 Single 같은 멀티 침대도 개별 행으로 표시됩니다."
+      "text": "Click ✎ on any room to edit name, bed type, size, and occupancy before filling.\nMulti-bed support (e.g. 1 Double and 3 Single) shown as separate rows."
     }
   ]
 }
