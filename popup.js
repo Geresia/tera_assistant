@@ -90,6 +90,7 @@ function renderHotelPreview(data) {
   const pkNo = !data.parking || data.parking === 'No';
   const pkFree = data.parking === 'Free' || data.parking_type === 'Free';
   const pkPaid = !pkNo && !pkFree;
+  const cleanFee = v => (!v || /^-+$/.test(v.trim())) ? '' : v;
 
   const checkinDisplay = isYes
     ? `${data.checkin_time || '--'} → ${data.checkout_time || '--'}`
@@ -114,10 +115,12 @@ function renderHotelPreview(data) {
           <input class="room-edit-input" id="hf-name-en" placeholder="English" value="${escHtml(data.name_en || '')}">
           <input class="room-edit-input" id="hf-name-local" placeholder="Local" value="${escHtml(data.name_local || '')}">
         </div>
+        <div class="hf-err" id="hf-name-err"></div>
       </div>
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">Address in Local Language</div>
         <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-address" value="${escHtml(data.address || '')}">
+        <div class="hf-err" id="hf-address-err"></div>
       </div>
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">24hr Front Desk</div>
@@ -133,6 +136,7 @@ function renderHotelPreview(data) {
           <span style="color:#aeaeb2;font-size:11px;flex-shrink:0;">→</span>
           <input class="room-edit-input" id="hf-checkout" placeholder="12:00" value="${escHtml(data.checkout_time || '')}">
         </div>
+        <div class="hf-err" id="hf-time-err"></div>
       </div>
       <div id="hf-time-range" class="hotel-edit-group"${isYes ? ' style="display:none"' : ''}>
         <div class="hotel-edit-group-label">Check-in</div>
@@ -147,6 +151,7 @@ function renderHotelPreview(data) {
           <span style="color:#aeaeb2;font-size:11px;flex-shrink:0;">→</span>
           <input class="room-edit-input" id="hf-checkout-to" placeholder="To" value="${escHtml(data.checkout_time || '')}">
         </div>
+        <div class="hf-err" id="hf-time-range-err"></div>
       </div>
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">Built / Renovated</div>
@@ -154,13 +159,15 @@ function renderHotelPreview(data) {
           <input class="room-edit-input" id="hf-built" placeholder="Built year" value="${escHtml(data.built_year || '')}">
           <input class="room-edit-input" id="hf-renovated" placeholder="Renovated year" value="${escHtml(data.renovated_year || '')}">
         </div>
+        <div class="hf-err" id="hf-built-err"></div>
       </div>
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">Rooms / Floors</div>
         <div class="hotel-edit-row">
           <input class="room-edit-input" id="hf-rooms" placeholder="Rooms" value="${escHtml(data.room_count || '')}">
-          <input class="room-edit-input" id="hf-floors" placeholder="Floors" value="${escHtml(data.floor_count || '')}">
+          <input class="room-edit-input" id="hf-floors" placeholder="Floors (optional)" value="${escHtml(data.floor_count || '')}">
         </div>
+        <div class="hf-err" id="hf-rooms-err"></div>
       </div>
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">Room Service</div>
@@ -184,12 +191,12 @@ function renderHotelPreview(data) {
           <button class="hotel-toggle-btn${!atYes ? ' active' : ''}" data-key="airport_transfer" data-val="No">No</button>
         </div>
         <div id="hf-transfer-fee-wrap" style="margin-top:6px;${atYes ? '' : 'display:none;'}">
-          <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-transfer-fee" placeholder="Transfer fee" value="${escHtml(data.airport_transfer_fee || '')}">
+          <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-transfer-fee" placeholder="Transfer fee" value="${escHtml(cleanFee(data.airport_transfer_fee))}">
         </div>
       </div>
       <div class="hotel-edit-group">
-        <div class="hotel-edit-group-label">Breakfast Charge</div>
-        <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-breakfast" placeholder="Price (e.g. 15000)" value="${escHtml(data.breakfast_price || '')}">
+        <div class="hotel-edit-group-label">Breakfast Charge (optional)</div>
+        <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-breakfast" placeholder="Price (e.g. 15000)" value="${escHtml(cleanFee(data.breakfast_price))}">
       </div>
     </div>
   `;
@@ -218,6 +225,52 @@ function renderHotelPreview(data) {
   bindInput('hf-transfer-fee', 'airport_transfer_fee');
   bindInput('hf-breakfast', 'breakfast_price');
 
+  // Required field validation (blur triggers)
+  const req = (ids, errId) => {
+    const err = document.getElementById(errId);
+    if (!err) return;
+    const check = () => {
+      const empties = ids.map(id => document.getElementById(id))
+        .filter(el => el && el.offsetParent !== null && !el.value.trim());
+      if (empties.length) { empties.forEach(el => el.classList.add('error')); err.textContent = 'Required'; }
+      else { ids.forEach(id => document.getElementById(id)?.classList.remove('error')); err.textContent = ''; }
+    };
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('blur', check);
+      el.addEventListener('input', () => { if (el.value.trim()) { el.classList.remove('error'); if (err.textContent === 'Required') err.textContent = ''; } });
+    });
+  };
+  req(['hf-name-en', 'hf-name-local'], 'hf-name-err');
+  req(['hf-address'], 'hf-address-err');
+  req(['hf-checkin', 'hf-checkout'], 'hf-time-err');
+  req(['hf-checkin-from', 'hf-checkin-to', 'hf-checkout-from', 'hf-checkout-to'], 'hf-time-range-err');
+  req(['hf-rooms'], 'hf-rooms-err');
+
+  // Built / Renovated validation
+  const checkBuiltRenovated = () => {
+    const builtEl = document.getElementById('hf-built');
+    const renovEl = document.getElementById('hf-renovated');
+    const err = document.getElementById('hf-built-err');
+    if (!err || !builtEl) return;
+    const bv = builtEl.value.trim(), rv = renovEl?.value.trim();
+    if (!bv) { builtEl.classList.add('error'); err.textContent = 'Required'; return; }
+    builtEl.classList.remove('error');
+    if (rv && parseInt(rv) < parseInt(bv)) {
+      renovEl.classList.add('error');
+      err.textContent = 'Last renovated year must be greater or equals than built year';
+    } else {
+      renovEl?.classList.remove('error');
+      err.textContent = '';
+    }
+  };
+  ['hf-built', 'hf-renovated'].forEach(id => {
+    document.getElementById(id)?.addEventListener('blur', checkBuiltRenovated);
+    document.getElementById(id)?.addEventListener('input', checkBuiltRenovated);
+  });
+
+  // Toggle buttons
   container.querySelectorAll('.hotel-toggle-btn[data-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
