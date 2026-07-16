@@ -355,6 +355,52 @@
       font-weight: 500;
     }
     #continueBtn:hover { background: #0077ed; }
+
+    /* Update Banner */
+    #updateBanner {
+      display: none;
+      background: #f0f7ff;
+      border: 0.5px solid #0071e3;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 20px;
+    }
+    .update-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .update-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #0071e3;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .update-version {
+      font-size: 11px;
+      font-weight: 600;
+      color: #0071e3;
+      background: #ddeeff;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    #updateImage {
+      display: none;
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 0.5px solid #d1d1d6;
+    }
+    #updateChangelog {
+      font-size: 12px;
+      color: #3d3d3f;
+      line-height: 1.55;
+      margin: 0 0 12px;
+      white-space: pre-line;
+    }
+    .update-actions { display: flex; gap: 8px; }
   </style>
 </head>
 <body>
@@ -367,7 +413,20 @@
     </div>
   </div>
 
-  <!-- ===== Hotel Info ===== -->
+  <!-- ===== Update Banner ===== -->
+  <div id="updateBanner">
+    <div class="update-header">
+      <span class="update-title">Update Available</span>
+      <span class="update-version" id="updateVersion"></span>
+    </div>
+    <img id="updateImage" alt="What's new">
+    <p id="updateChangelog"></p>
+    <div class="update-actions">
+      <button class="btn-primary" id="updateHowBtn" style="flex:1; font-size:12px;">How to Update</button>
+      <button class="btn-gray" id="updateDismissBtn" style="padding:10px 14px; font-size:12px;">✕</button>
+    </div>
+  </div>
+
   <!-- ===== Hotel Info ===== -->
   <div class="section">
     <div class="section-label">Hotel Info</div>

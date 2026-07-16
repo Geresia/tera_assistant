@@ -371,7 +371,21 @@ async function checkForUpdates() {
     const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
-      alert(`New update available (v${data.version})!\nPlease run Tera_Update.bat to update. Thank you!`);
+      const banner = document.getElementById('updateBanner');
+      document.getElementById('updateVersion').textContent = `v${data.version}`;
+
+      const img = document.getElementById('updateImage');
+      if (data.image) { img.src = data.image; img.style.display = 'block'; }
+
+      document.getElementById('updateChangelog').textContent =
+        data.changelog || `Version ${data.version} is available.`;
+
+      banner.style.display = 'block';
+
+      document.getElementById('updateDismissBtn').onclick = () => { banner.style.display = 'none'; };
+      document.getElementById('updateHowBtn').onclick = () => {
+        alert('tera_assistant 폴더에서 Tera_Update.bat 를 더블클릭 하세요.\nThen reload the extension at chrome://extensions');
+      };
     }
   } catch (e) { console.log("Version check failed:", e.message); }
 }

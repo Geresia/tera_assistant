@@ -1,1 +1,5 @@
-{"version": "5.51"}
+{
+  "version": "5.51",
+  "changelog": "Room scan preview: click ✎ on any room to edit name, bed type, size, and occupancy before filling.\nMulti-bed support (e.g. 1 Double and 3 Single).",
+  "image": ""
+}
