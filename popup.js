@@ -79,7 +79,7 @@ chrome.storage.session.get(['roomData', 'hotelPhotos'], (data) => {
 });
 
 // ── Constants ──
-const CURRENT_VERSION = "5.51";
+const CURRENT_VERSION = "5.5";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -376,8 +376,9 @@ async function checkForUpdates() {
 
       // Notification view
       document.getElementById('updateVersion').textContent = `v${data.version}`;
-      document.getElementById('updateChangelog').textContent =
-        data.changelog || `Version ${data.version} is available.`;
+      const changelogEl = document.getElementById('updateChangelog');
+      changelogEl.textContent = data.changelog || '';
+      changelogEl.style.display = data.changelog ? 'block' : 'none';
       modal.classList.add('open');
       document.getElementById('updateDismissBtn').onclick = close;
 
