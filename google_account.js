@@ -1,8 +1,13 @@
 (async () => {
-  // Only activate during Traveloka OAuth flow
-  if (!location.href.includes('traveloka')) return;
-
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Only activate when Google is authenticating for Traveloka
+  let isTraveloka = false;
+  for (let i = 0; i < 20; i++) {
+    if (document.querySelector('[data-app-name="Traveloka"]')) { isTraveloka = true; break; }
+    await sleep(200);
+  }
+  if (!isTraveloka) return;
 
   function toast(msg) {
     const div = document.createElement('div');
