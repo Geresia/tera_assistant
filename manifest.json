@@ -26,6 +26,9 @@
     "https://*.agoda.net/*",
     "https://accounts.google.com/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; img-src 'self' https://raw.githubusercontent.com; object-src 'self'"
+  },
   "content_scripts": [
     {
       "matches": ["https://www.agoda.com/*"],
