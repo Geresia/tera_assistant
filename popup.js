@@ -384,7 +384,7 @@ async function checkForUpdates() {
 
       document.getElementById('updateDismissBtn').onclick = () => { modal.classList.remove('open'); };
       document.getElementById('updateHowBtn').onclick = () => {
-        alert('tera_assistant 폴더에서 Tera_Update.bat 를 더블클릭 하세요.\nThen reload the extension at chrome://extensions');
+        alert('Double-click Tera_Update.bat in your tera_assistant folder.\nThen reload the extension at chrome://extensions');
       };
     }
   } catch (e) { console.log("Version check failed:", e.message); }
