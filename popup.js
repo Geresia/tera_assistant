@@ -85,7 +85,13 @@ function renderHotelPreview(data) {
   const container = document.getElementById('hotelPreview');
   if (!data) { container.style.display = 'none'; container.innerHTML = ''; return; }
 
-  const checkinDisplay = data.front_desk_hours === 'Yes'
+  const isYes = data.front_desk_hours === 'Yes';
+  const atYes = data.airport_transfer === 'Yes';
+  const pkNo = !data.parking || data.parking === 'No';
+  const pkFree = data.parking === 'Free' || data.parking_type === 'Free';
+  const pkPaid = !pkNo && !pkFree;
+
+  const checkinDisplay = isYes
     ? `${data.checkin_time || '--'} → ${data.checkout_time || '--'}`
     : `${data.checkin_time || '--'}~${data.checkin_end || '--'} / ${data.checkout_start || '--'}~${data.checkout_time || '--'}`;
   const metaParts = [
@@ -93,10 +99,6 @@ function renderHotelPreview(data) {
     data.built_year && data.built_year !== '1' ? `Built ${data.built_year}` : null,
     data.room_count ? `${data.room_count} rooms` : null,
   ].filter(Boolean);
-
-  const pkNo = !data.parking || data.parking === 'No';
-  const pkFree = data.parking === 'Free' || data.parking_type === 'Free';
-  const pkPaid = !pkNo && !pkFree;
 
   container.style.display = 'block';
   container.innerHTML = `
@@ -114,10 +116,17 @@ function renderHotelPreview(data) {
         </div>
       </div>
       <div class="hotel-edit-group">
-        <div class="hotel-edit-group-label">Address</div>
+        <div class="hotel-edit-group-label">Address in Local Language</div>
         <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-address" value="${escHtml(data.address || '')}">
       </div>
       <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">24hr Front Desk</div>
+        <div class="hotel-toggle-wrap">
+          <button class="hotel-toggle-btn${isYes ? ' active' : ''}" data-key="front_desk_hours" data-val="Yes">Yes</button>
+          <button class="hotel-toggle-btn${!isYes ? ' active' : ''}" data-key="front_desk_hours" data-val="No">No</button>
+        </div>
+      </div>
+      <div id="hf-time-single" class="hotel-edit-group"${!isYes ? ' style="display:none"' : ''}>
         <div class="hotel-edit-group-label">Check-in / Check-out</div>
         <div class="hotel-edit-row">
           <input class="room-edit-input" id="hf-checkin" placeholder="14:00" value="${escHtml(data.checkin_time || '')}">
@@ -125,11 +134,18 @@ function renderHotelPreview(data) {
           <input class="room-edit-input" id="hf-checkout" placeholder="12:00" value="${escHtml(data.checkout_time || '')}">
         </div>
       </div>
-      <div class="hotel-edit-group">
-        <div class="hotel-edit-group-label">24hr Front Desk</div>
-        <div class="hotel-toggle-wrap">
-          <button class="hotel-toggle-btn${data.front_desk_hours === 'Yes' ? ' active' : ''}" data-key="front_desk_hours" data-val="Yes">Yes</button>
-          <button class="hotel-toggle-btn${data.front_desk_hours !== 'Yes' ? ' active' : ''}" data-key="front_desk_hours" data-val="No">No</button>
+      <div id="hf-time-range" class="hotel-edit-group"${isYes ? ' style="display:none"' : ''}>
+        <div class="hotel-edit-group-label">Check-in</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-checkin-from" placeholder="From" value="${escHtml(data.checkin_time || '')}">
+          <span style="color:#aeaeb2;font-size:11px;flex-shrink:0;">→</span>
+          <input class="room-edit-input" id="hf-checkin-to" placeholder="To" value="${escHtml(data.checkin_end || '')}">
+        </div>
+        <div class="hotel-edit-group-label" style="margin-top:6px;">Check-out</div>
+        <div class="hotel-edit-row">
+          <input class="room-edit-input" id="hf-checkout-from" placeholder="From" value="${escHtml(data.checkout_start || '')}">
+          <span style="color:#aeaeb2;font-size:11px;flex-shrink:0;">→</span>
+          <input class="room-edit-input" id="hf-checkout-to" placeholder="To" value="${escHtml(data.checkout_time || '')}">
         </div>
       </div>
       <div class="hotel-edit-group">
@@ -164,9 +180,16 @@ function renderHotelPreview(data) {
       <div class="hotel-edit-group">
         <div class="hotel-edit-group-label">Airport Transfer</div>
         <div class="hotel-toggle-wrap">
-          <button class="hotel-toggle-btn${data.airport_transfer === 'Yes' ? ' active' : ''}" data-key="airport_transfer" data-val="Yes">Yes</button>
-          <button class="hotel-toggle-btn${data.airport_transfer !== 'Yes' ? ' active' : ''}" data-key="airport_transfer" data-val="No">No</button>
+          <button class="hotel-toggle-btn${atYes ? ' active' : ''}" data-key="airport_transfer" data-val="Yes">Yes</button>
+          <button class="hotel-toggle-btn${!atYes ? ' active' : ''}" data-key="airport_transfer" data-val="No">No</button>
         </div>
+        <div id="hf-transfer-fee-wrap" style="margin-top:6px;${atYes ? '' : 'display:none;'}">
+          <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-transfer-fee" placeholder="Transfer fee" value="${escHtml(data.airport_transfer_fee || '')}">
+        </div>
+      </div>
+      <div class="hotel-edit-group">
+        <div class="hotel-edit-group-label">Breakfast Charge</div>
+        <input class="room-edit-input" style="width:100%;box-sizing:border-box;" id="hf-breakfast" placeholder="Price (e.g. 15000)" value="${escHtml(data.breakfast_price || '')}">
       </div>
     </div>
   `;
@@ -184,18 +207,32 @@ function renderHotelPreview(data) {
   bindInput('hf-address', 'address');
   bindInput('hf-checkin', 'checkin_time');
   bindInput('hf-checkout', 'checkout_time');
+  bindInput('hf-checkin-from', 'checkin_time');
+  bindInput('hf-checkin-to', 'checkin_end');
+  bindInput('hf-checkout-from', 'checkout_start');
+  bindInput('hf-checkout-to', 'checkout_time');
   bindInput('hf-built', 'built_year');
   bindInput('hf-renovated', 'renovated_year');
   bindInput('hf-rooms', 'room_count');
   bindInput('hf-floors', 'floor_count');
+  bindInput('hf-transfer-fee', 'airport_transfer_fee');
+  bindInput('hf-breakfast', 'breakfast_price');
 
   container.querySelectorAll('.hotel-toggle-btn[data-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
-      currentHotelData[key] = btn.dataset.val;
+      const val = btn.dataset.val;
+      currentHotelData[key] = val;
       container.querySelectorAll(`.hotel-toggle-btn[data-key="${key}"]`).forEach(b => {
-        b.classList.toggle('active', b.dataset.val === btn.dataset.val);
+        b.classList.toggle('active', b.dataset.val === val);
       });
+      if (key === 'front_desk_hours') {
+        document.getElementById('hf-time-single').style.display = val === 'Yes' ? '' : 'none';
+        document.getElementById('hf-time-range').style.display = val === 'Yes' ? 'none' : '';
+      }
+      if (key === 'airport_transfer') {
+        document.getElementById('hf-transfer-fee-wrap').style.display = val === 'Yes' ? '' : 'none';
+      }
     });
   });
 
@@ -529,18 +566,29 @@ async function checkForUpdates() {
         const container = document.getElementById('updateNoteImages');
         container.innerHTML = '';
         if (imgUrls.length) {
-          container.className = imgUrls.length === 1 ? 'single' : 'multi';
-          imgUrls.forEach(url => {
-            const el = document.createElement('img');
-            el.src = url; el.alt = '';
-            el.onclick = () => {
-              document.getElementById('imgLightboxImg').src = url;
+          container.style.display = 'block';
+          let ci = 0;
+          const renderCarousel = () => {
+            container.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = imgUrls[ci]; img.alt = '';
+            img.onclick = () => {
+              document.getElementById('imgLightboxImg').src = imgUrls[ci];
               document.getElementById('imgLightbox').classList.add('open');
             };
-            container.appendChild(el);
-          });
+            container.appendChild(img);
+            if (imgUrls.length > 1) {
+              const nav = document.createElement('div');
+              nav.className = 'note-img-nav';
+              nav.innerHTML = `<button class="note-img-btn"${ci===0?' disabled':''}>◀</button><span class="note-img-num">${ci+1} / ${imgUrls.length}</span><button class="note-img-btn"${ci===imgUrls.length-1?' disabled':''}>▶</button>`;
+              container.appendChild(nav);
+              nav.querySelectorAll('.note-img-btn')[0].addEventListener('click', () => { if(ci>0){ci--;renderCarousel();} });
+              nav.querySelectorAll('.note-img-btn')[1].addEventListener('click', () => { if(ci<imgUrls.length-1){ci++;renderCarousel();} });
+            }
+          };
+          renderCarousel();
         } else {
-          container.className = '';
+          container.style.display = 'none';
         }
         const titleEl = document.getElementById('updateNoteTitle');
         titleEl.textContent = note.title || '';

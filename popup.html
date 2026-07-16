@@ -474,20 +474,37 @@
     #updateNoteView { display: none; }
     #updateNoteImages {
       display: none;
-      gap: 6px;
       margin-bottom: 10px;
     }
-    #updateNoteImages.single { display: flex; flex-direction: column; }
-    #updateNoteImages.multi { display: grid; grid-template-columns: 1fr 1fr; }
     #updateNoteImages img {
       width: 100%;
+      max-height: 300px;
       border-radius: 8px;
       border: 0.5px solid #d1d1d6;
-      object-fit: cover;
+      object-fit: contain;
       cursor: zoom-in;
+      display: block;
     }
-    #updateNoteImages.single img { max-height: 400px; object-fit: contain; }
-    #updateNoteImages.multi img { max-height: 160px; }
+    .note-img-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    .note-img-btn {
+      background: #f5f5f7;
+      border: 0.5px solid #e5e5ea;
+      border-radius: 8px;
+      padding: 5px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      color: #1d1d1f;
+      transition: all 0.15s;
+    }
+    .note-img-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .note-img-btn:not(:disabled):hover { background: #e5e5ea; }
+    .note-img-num { font-size: 11px; color: #aeaeb2; }
     #updateNoteTitle {
       font-size: 13px;
       font-weight: 600;
