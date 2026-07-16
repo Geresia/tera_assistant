@@ -2338,22 +2338,26 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
   if (tab.url?.includes("tera.traveloka.com")) {
     if (!currentHotelData) { setExtractStatus(t().hotelInsertNoData, "error"); return; }
     btn.disabled = true;
+    try {
+      await exec(tab.id, () => {
+        Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Details")?.click();
+      });
+      await sleep(800);
 
-    await exec(tab.id, () => {
-      Array.from(document.querySelectorAll('a.c-sidebar-item')).find(el => el.textContent.trim() === "Details")?.click();
-    });
-    await sleep(800);
+      // "저장 안 하고 이동하시겠습니까?" 확인 모달이 뜨면 "Yes, move to the other tab" 클릭
+      const movePrompt = await exec(tab.id, () => {
+        const btn = Array.from(document.querySelectorAll('button span')).find(el => el.textContent.trim() === 'Yes, move to the other tab');
+        if (btn) { btn.closest('button').click(); return true; }
+        return false;
+      });
+      if (movePrompt?.[0]?.result) await sleep(1000);
 
-    // "저장 안 하고 이동하시겠습니까?" 확인 모달이 뜨면 "Yes, move to the other tab" 클릭
-    const movePrompt = await exec(tab.id, () => {
-      const btn = Array.from(document.querySelectorAll('button span')).find(el => el.textContent.trim() === 'Yes, move to the other tab');
-      if (btn) { btn.closest('button').click(); return true; }
-      return false;
-    });
-    if (movePrompt?.[0]?.result) await sleep(1000);
-
-    await runHotelAutofill(tab.id);
-    btn.disabled = false;
+      await runHotelAutofill(tab.id);
+    } catch (e) {
+      setExtractStatus("Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
     return;
   }
 
