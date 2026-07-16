@@ -393,6 +393,10 @@ async function checkForUpdates() {
         const img = document.getElementById('updateNoteImage');
         if (note.image) { img.src = note.image; img.style.display = 'block'; }
         else { img.style.display = 'none'; }
+        img.onclick = note.image ? () => {
+          document.getElementById('imgLightboxImg').src = note.image;
+          document.getElementById('imgLightbox').classList.add('open');
+        } : null;
         document.getElementById('updateNoteText').textContent = note.text || '';
         document.getElementById('updatePageNum').textContent = `${idx + 1} / ${notes.length}`;
         document.getElementById('updatePrevBtn').disabled = idx === 0;
@@ -409,6 +413,9 @@ async function checkForUpdates() {
       document.getElementById('updatePrevBtn').onclick = () => { if (page > 0) showPage(--page); };
       document.getElementById('updateNextBtn').onclick = () => { if (page < notes.length - 1) showPage(++page); };
       document.getElementById('updateCloseNoteBtn').onclick = close;
+      document.getElementById('imgLightbox').onclick = () => {
+        document.getElementById('imgLightbox').classList.remove('open');
+      };
       document.getElementById('updateBackBtn').onclick = () => {
         document.getElementById('updateNoteView').style.display = 'none';
         document.getElementById('updateNotifView').style.display = 'block';
