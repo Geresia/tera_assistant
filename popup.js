@@ -397,6 +397,9 @@ async function checkForUpdates() {
           document.getElementById('imgLightboxImg').src = note.image;
           document.getElementById('imgLightbox').classList.add('open');
         } : null;
+        const titleEl = document.getElementById('updateNoteTitle');
+        titleEl.textContent = note.title || '';
+        titleEl.style.display = note.title ? 'block' : 'none';
         document.getElementById('updateNoteText').textContent = note.text || '';
         document.getElementById('updatePageNum').textContent = `${idx + 1} / ${notes.length}`;
         document.getElementById('updatePrevBtn').disabled = idx === 0;
