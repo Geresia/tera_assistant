@@ -1448,11 +1448,44 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const roomList = document.getElementById("roomList");
     roomList.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="checkAll" checked> All</label></div>`;
     finalRooms.forEach((room, i) => {
-      const item = document.createElement("div");
-      item.className = "room-item";
-      item.innerHTML = `<input type="checkbox" class="room-cb" data-index="${i}" checked><span>${room.roomName}</span>`;
-      item.querySelector('span').onclick = () => item.querySelector('input').click();
-      roomList.appendChild(item);
+      const entry = document.createElement("div");
+      entry.className = "room-entry";
+      entry.innerHTML = `
+        <div class="room-item">
+          <input type="checkbox" class="room-cb" data-index="${i}" checked>
+          <span class="room-name-label" style="flex:1"></span>
+          <button class="room-edit-btn" type="button" title="Edit">✎</button>
+        </div>
+        <div class="room-edit-panel">
+          <div class="room-edit-field"><span class="room-edit-label">Name</span><input class="room-edit-input" data-field="roomName"></div>
+          <div class="room-edit-field"><span class="room-edit-label">Bed</span><input class="room-edit-input" data-field="bedText"></div>
+          <div class="room-edit-field"><span class="room-edit-label">Size</span><input class="room-edit-input" data-field="sizeText"></div>
+          <div class="room-edit-field"><span class="room-edit-label">Adults</span><input class="room-edit-input" type="number" min="1" max="10" data-field="maxAdults"></div>
+        </div>`;
+      entry.querySelector('.room-name-label').textContent = room.roomName || '';
+      entry.querySelector('[data-field="roomName"]').value = room.roomName || '';
+      entry.querySelector('[data-field="bedText"]').value = room.bedText || '';
+      entry.querySelector('[data-field="sizeText"]').value = room.sizeText || '';
+      entry.querySelector('[data-field="maxAdults"]').value = room.maxAdults || 2;
+      entry.querySelector('.room-name-label').addEventListener('click', () => {
+        const cb = entry.querySelector('.room-cb');
+        cb.checked = !cb.checked;
+      });
+      entry.querySelector('.room-edit-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        entry.querySelector('.room-edit-panel').classList.toggle('open');
+      });
+      entry.querySelectorAll('.room-edit-input').forEach(input => {
+        input.addEventListener('change', () => {
+          const field = input.dataset.field;
+          const val = field === 'maxAdults' ? (parseInt(input.value) || 2) : input.value;
+          roomData[i][field] = val;
+          if (field === 'maxAdults') roomData[i].occupancy = val + ' adults';
+          if (field === 'roomName') entry.querySelector('.room-name-label').textContent = input.value;
+          chrome.storage.session.set({ roomData });
+        });
+      });
+      roomList.appendChild(entry);
     });
     document.getElementById("checkAll").addEventListener("change", (e) => {
       document.querySelectorAll(".room-cb").forEach(cb => cb.checked = e.target.checked);
