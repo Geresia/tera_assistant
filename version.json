@@ -1,5 +1,14 @@
 {
   "version": "5.51",
-  "changelog": "Room scan preview: click ✎ on any room to edit name, bed type, size, and occupancy before filling.\nMulti-bed support (e.g. 1 Double and 3 Single).",
-  "image": ""
+  "changelog": "Room scan preview with inline editing + multi-bed support.",
+  "notes": [
+    {
+      "image": "",
+      "text": "Room scan preview: click ✎ on any room to edit name, bed type, size, and occupancy before filling."
+    },
+    {
+      "image": "",
+      "text": "Multi-bed support: rooms with multiple bed types (e.g. 1 Double and 3 Single) show as separate rows with + Add / × Remove."
+    }
+  ]
 }

@@ -396,13 +396,6 @@
       padding: 2px 8px;
       border-radius: 10px;
     }
-    #updateImage {
-      display: none;
-      width: 100%;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      border: 0.5px solid #d1d1d6;
-    }
     #updateChangelog {
       font-size: 12px;
       color: #3d3d3f;
@@ -411,6 +404,44 @@
       white-space: pre-line;
     }
     .update-actions { display: flex; gap: 8px; }
+    /* Notes slide view */
+    #updateNoteView { display: none; }
+    #updateNoteImage {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 0.5px solid #d1d1d6;
+      display: none;
+    }
+    #updateNoteText {
+      font-size: 12px;
+      color: #3d3d3f;
+      line-height: 1.55;
+      margin: 0 0 14px;
+      white-space: pre-line;
+      min-height: 36px;
+    }
+    .note-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .note-nav-btn {
+      background: #f5f5f7;
+      border: 0.5px solid #e5e5ea;
+      border-radius: 8px;
+      padding: 7px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      color: #1d1d1f;
+      transition: all 0.15s;
+    }
+    .note-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .note-nav-btn:not(:disabled):hover { background: #e5e5ea; }
+    #updatePageNum { font-size: 11px; color: #aeaeb2; }
   </style>
 </head>
 <body>
@@ -426,16 +457,36 @@
   <!-- ===== Update Modal ===== -->
   <div id="updateModal">
     <div id="updateModalBox">
-      <div class="update-header">
-        <span class="update-title">Update Available</span>
-        <span class="update-version" id="updateVersion"></span>
+
+      <!-- Notification view -->
+      <div id="updateNotifView">
+        <div class="update-header">
+          <span class="update-title">Update Available</span>
+          <span class="update-version" id="updateVersion"></span>
+        </div>
+        <p id="updateChangelog"></p>
+        <div class="update-actions">
+          <button class="btn-primary" id="updateNoteBtn" style="flex:1; font-size:12px;">Update Note</button>
+          <button class="btn-gray" id="updateDismissBtn" style="padding:10px 14px; font-size:12px;">✕</button>
+        </div>
       </div>
-      <img id="updateImage" alt="What's new">
-      <p id="updateChangelog"></p>
-      <div class="update-actions">
-        <button class="btn-primary" id="updateHowBtn" style="flex:1; font-size:12px;">Patch Note</button>
-        <button class="btn-gray" id="updateDismissBtn" style="padding:10px 14px; font-size:12px;">✕</button>
+
+      <!-- Slide view -->
+      <div id="updateNoteView">
+        <div class="update-header">
+          <span class="update-title">Update Note</span>
+          <span class="update-version" id="updateNoteVersion"></span>
+        </div>
+        <img id="updateNoteImage" alt="">
+        <p id="updateNoteText"></p>
+        <div class="note-nav">
+          <button class="note-nav-btn" id="updatePrevBtn">◀</button>
+          <span id="updatePageNum"></span>
+          <button class="note-nav-btn" id="updateNextBtn">▶</button>
+        </div>
+        <button class="btn-gray" id="updateCloseNoteBtn" style="width:100%; font-size:12px;">Close</button>
       </div>
+
     </div>
   </div>
 

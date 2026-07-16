@@ -372,18 +372,42 @@ async function checkForUpdates() {
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
       const modal = document.getElementById('updateModal');
+      const close = () => modal.classList.remove('open');
+
+      // Notification view
       document.getElementById('updateVersion').textContent = `v${data.version}`;
-
-      const img = document.getElementById('updateImage');
-      if (data.image) { img.src = data.image; img.style.display = 'block'; }
-
       document.getElementById('updateChangelog').textContent =
         data.changelog || `Version ${data.version} is available.`;
-
       modal.classList.add('open');
+      document.getElementById('updateDismissBtn').onclick = close;
 
-      document.getElementById('updateDismissBtn').onclick = () => { modal.classList.remove('open'); };
-      document.getElementById('updateHowBtn').onclick = () => { modal.classList.remove('open'); };
+      // Slide view setup
+      const notes = Array.isArray(data.notes) && data.notes.length
+        ? data.notes
+        : [{ image: data.image || '', text: data.changelog || '' }];
+      let page = 0;
+
+      const showPage = (idx) => {
+        const note = notes[idx];
+        const img = document.getElementById('updateNoteImage');
+        if (note.image) { img.src = note.image; img.style.display = 'block'; }
+        else { img.style.display = 'none'; }
+        document.getElementById('updateNoteText').textContent = note.text || '';
+        document.getElementById('updatePageNum').textContent = `${idx + 1} / ${notes.length}`;
+        document.getElementById('updatePrevBtn').disabled = idx === 0;
+        document.getElementById('updateNextBtn').disabled = idx === notes.length - 1;
+      };
+
+      document.getElementById('updateNoteBtn').onclick = () => {
+        document.getElementById('updateNotifView').style.display = 'none';
+        document.getElementById('updateNoteVersion').textContent = `v${data.version}`;
+        document.getElementById('updateNoteView').style.display = 'block';
+        page = 0;
+        showPage(0);
+      };
+      document.getElementById('updatePrevBtn').onclick = () => { if (page > 0) showPage(--page); };
+      document.getElementById('updateNextBtn').onclick = () => { if (page < notes.length - 1) showPage(++page); };
+      document.getElementById('updateCloseNoteBtn').onclick = close;
     }
   } catch (e) { console.log("Version check failed:", e.message); }
 }
