@@ -1449,9 +1449,14 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const roomList = document.getElementById("roomList");
     roomList.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="checkAll" checked> All</label></div>`;
     finalRooms.forEach((room, i) => {
-      const bedMatch = (room.bedText || '').match(/^(\d+)\s+(.+?)\s+bed/i);
-      const initCount = bedMatch?.[1] || '1';
-      const initType = BED_TYPES.find(t => t.toLowerCase() === (bedMatch?.[2] || '').toLowerCase()) || 'Double';
+      const editBeds = (room.bedText || '').split(/\s+and\s+/i).map(part => {
+        const m = part.trim().match(/^(\d+)\s+(.+?)\s+beds?/i);
+        if (!m) return null;
+        const type = BED_TYPES.find(t => t.toLowerCase() === m[2].trim().toLowerCase()) || 'Double';
+        return { count: parseInt(m[1]) || 1, type };
+      }).filter(Boolean);
+      if (!editBeds.length) editBeds.push({ count: 1, type: 'Double' });
+
       const initSize = room.sizeText?.match(/[\d.]+/)?.[0] || '';
 
       const entry = document.createElement("div");
@@ -1464,17 +1469,9 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         </div>
         <div class="room-edit-panel">
           <div class="room-edit-field"><span class="room-edit-label">Name</span><input class="room-edit-input" data-field="roomName"></div>
-          <div class="room-edit-field">
-            <span class="room-edit-label">Bed</span>
-            <div class="bed-edit-wrap">
-              <div class="bed-count-row">
-                <input class="room-edit-input bed-count-input" type="number" min="1" max="10">
-                <span class="bed-unit-label">bed(s)</span>
-              </div>
-              <div class="bed-type-grid">
-                ${BED_TYPES.map(t => `<button class="bed-type-btn" type="button" data-type="${t}">${t}</button>`).join('')}
-              </div>
-            </div>
+          <div class="room-edit-field" style="align-items:flex-start">
+            <span class="room-edit-label" style="padding-top:5px">Bed</span>
+            <div class="bed-edit-wrap"></div>
           </div>
           <div class="room-edit-field">
             <span class="room-edit-label">Size</span>
@@ -1486,27 +1483,63 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
       entry.querySelector('.room-name-label').textContent = room.roomName || '';
       entry.querySelector('[data-field="roomName"]').value = room.roomName || '';
-      entry.querySelector('.bed-count-input').value = initCount;
       entry.querySelector('[data-field="sizeText"]').value = initSize;
       entry.querySelector('[data-field="maxAdults"]').value = room.maxAdults || 2;
 
-      let currentBedType = initType;
-      const syncBed = () => {
-        const count = entry.querySelector('.bed-count-input').value || '1';
-        roomData[i].bedText = `${count} ${currentBedType} bed`;
+      const bedWrap = entry.querySelector('.bed-edit-wrap');
+      const syncBeds = () => {
+        roomData[i].bedText = editBeds.map(b => `${b.count} ${b.type} bed`).join(' and ');
         chrome.storage.session.set({ roomData });
       };
-      const setActiveType = (type) => {
-        currentBedType = type;
-        entry.querySelectorAll('.bed-type-btn').forEach(btn =>
-          btn.classList.toggle('active', btn.dataset.type === type));
+      const renderBedRows = () => {
+        bedWrap.innerHTML = '';
+        editBeds.forEach((bed, bi) => {
+          const row = document.createElement('div');
+          row.className = 'bed-row';
+          row.innerHTML = `
+            <div class="bed-count-row">
+              <input class="room-edit-input bed-count-input" type="number" min="1" max="10" value="${bed.count}">
+              <span class="bed-unit-label">bed(s)</span>
+              ${editBeds.length > 1 ? `<button class="bed-remove-btn" type="button">×</button>` : ''}
+            </div>
+            <div class="bed-type-grid">
+              ${BED_TYPES.map(t => `<button class="bed-type-btn${bed.type === t ? ' active' : ''}" type="button" data-type="${t}">${t}</button>`).join('')}
+            </div>`;
+          row.querySelector('.bed-count-input').addEventListener('change', (e) => {
+            editBeds[bi].count = parseInt(e.target.value) || 1;
+            syncBeds();
+          });
+          row.querySelectorAll('.bed-type-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              editBeds[bi].type = btn.dataset.type;
+              row.querySelectorAll('.bed-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+              syncBeds();
+            });
+          });
+          if (editBeds.length > 1) {
+            row.querySelector('.bed-remove-btn').addEventListener('click', (e) => {
+              e.stopPropagation();
+              editBeds.splice(bi, 1);
+              renderBedRows();
+              syncBeds();
+            });
+          }
+          bedWrap.appendChild(row);
+        });
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'bed-add-btn';
+        addBtn.textContent = '+ Add bed type';
+        addBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          editBeds.push({ count: 1, type: 'Double' });
+          renderBedRows();
+          syncBeds();
+        });
+        bedWrap.appendChild(addBtn);
       };
-      setActiveType(initType);
-
-      entry.querySelectorAll('.bed-type-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => { e.stopPropagation(); setActiveType(btn.dataset.type); syncBed(); });
-      });
-      entry.querySelector('.bed-count-input').addEventListener('change', syncBed);
+      renderBedRows();
 
       entry.querySelector('[data-field="roomName"]').addEventListener('change', (e) => {
         roomData[i].roomName = e.target.value;
@@ -1523,7 +1556,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         roomData[i].occupancy = val + ' adults';
         chrome.storage.session.set({ roomData });
       });
-
       entry.querySelector('.room-name-label').addEventListener('click', () => {
         entry.querySelector('.room-cb').checked = !entry.querySelector('.room-cb').checked;
       });
