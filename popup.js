@@ -409,6 +409,10 @@ async function checkForUpdates() {
       document.getElementById('updatePrevBtn').onclick = () => { if (page > 0) showPage(--page); };
       document.getElementById('updateNextBtn').onclick = () => { if (page < notes.length - 1) showPage(++page); };
       document.getElementById('updateCloseNoteBtn').onclick = close;
+      document.getElementById('updateBackBtn').onclick = () => {
+        document.getElementById('updateNoteView').style.display = 'none';
+        document.getElementById('updateNotifView').style.display = 'block';
+      };
     }
   } catch (e) { console.log("Version check failed:", e.message); }
 }
