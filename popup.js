@@ -390,6 +390,9 @@ async function checkForUpdates() {
 
       const showPage = (idx) => {
         const note = notes[idx];
+        const img = document.getElementById('updateNoteImage');
+        if (note.image) { img.src = note.image; img.style.display = 'block'; }
+        else { img.style.display = 'none'; }
         document.getElementById('updateNoteText').textContent = note.text || '';
         document.getElementById('updatePageNum').textContent = `${idx + 1} / ${notes.length}`;
         document.getElementById('updatePrevBtn').disabled = idx === 0;
