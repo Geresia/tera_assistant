@@ -383,9 +383,7 @@ async function checkForUpdates() {
       modal.classList.add('open');
 
       document.getElementById('updateDismissBtn').onclick = () => { modal.classList.remove('open'); };
-      document.getElementById('updateHowBtn').onclick = () => {
-        alert('Double-click Tera_Update.bat in your tera_assistant folder.\nThen reload the extension at chrome://extensions');
-      };
+      document.getElementById('updateHowBtn').onclick = () => { modal.classList.remove('open'); };
     }
   } catch (e) { console.log("Version check failed:", e.message); }
 }
