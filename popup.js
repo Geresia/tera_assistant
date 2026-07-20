@@ -887,7 +887,7 @@ async function teraFillOneRoom(tabId, room, roomType) {
     setter.call(el, desc);
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [typeof room.extraBedDesc === 'string' ? room.extraBedDesc : "Extra beds and cribs are unavailable for this room type"]);
+  }, [room.extraBedDesc || "Extra beds and cribs are unavailable for this room type"]);
   await sleep(200);
 
   await exec(tabId, () => {
