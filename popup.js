@@ -570,10 +570,6 @@ function matchRoomType(roomName) {
   return ROOM_TYPE_OPTIONS.find(o => name.includes(o.toLowerCase())) || "Standard";
 }
 
-function sanitizeName(name) {
-  return name.replace(/[\\/:*?"<>|]/g, "_").trim();
-}
-
 function waitForContinue(roomName, isError = false) {
   return new Promise(resolve => {
     const box = document.getElementById('pauseBox');
@@ -869,11 +865,22 @@ async function exec(tabId, func, args = [], world = undefined) {
 }
 
 async function teraFillOneRoom(tabId, room, roomType) {
-  await exec(tabId, () => {
-    for (const div of document.querySelectorAll('div')) {
-      if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) { div.click(); return; }
-    }
-  });
+  // 방 목록 페이지에 "Create New Room" 버튼이 뜰 때까지 대기 후 클릭
+  while (true) {
+    const found = await exec(tabId, () => {
+      const btn = Array.from(document.querySelectorAll('div')).find(d => d.textContent.trim() === "Create New Room" && d.children.length <= 2);
+      if (btn) { btn.click(); return true; }
+      return false;
+    });
+    if (found?.[0]?.result) break;
+    await sleep(300);
+  }
+  // URL이 /form/ 으로 바뀔 때까지 대기 (이전 폼 DOM 잔재 방지)
+  while (true) {
+    const r = await exec(tabId, () => window.location.href.includes('/form/'), [], "MAIN");
+    if (r?.[0]?.result) break;
+    await sleep(200);
+  }
   // Room Type 드롭다운이 뜰 때까지 무한 대기
   while (true) {
     const r = await exec(tabId, () => !!document.querySelector('[data-testid="select-rs-room-roomtype"]'));
@@ -884,8 +891,8 @@ async function teraFillOneRoom(tabId, room, roomType) {
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-roomtype"]')?.click());
   await sleep(200);
 
-  // 옵션이 실제로 뜰 때까지 polling
-  for (let i = 0; i < 16; i++) {
+  // 옵션이 실제로 뜰 때까지 무한 대기
+  while (true) {
     const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-roomtype-options"] span').length);
     if ((r?.[0]?.result || 0) > 0) break;
     await sleep(150);
@@ -896,8 +903,8 @@ async function teraFillOneRoom(tabId, room, roomType) {
       .find(s => s.textContent.trim() === type)?.closest('div').click();
   }, [roomType]);
 
-  // Room Description 필드가 뜰 때까지 polling
-  for (let i = 0; i < 16; i++) {
+  // Room Description 필드가 뜰 때까지 무한 대기
+  while (true) {
     const r = await exec(tabId, () => !!document.querySelector('[data-testid="textfield-rs-room-description"]'));
     if (r?.[0]?.result) break;
     await sleep(150);
@@ -935,24 +942,36 @@ async function teraFillOneRoom(tabId, room, roomType) {
   await sleep(500);
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-unit"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-unit-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(150);
+  }
   await exec(tabId, () => {
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-unit-options"] span'))
       .find(s => s.textContent.trim().toLowerCase() === 'sqm')?.closest('div').click();
   });
-  await sleep(500);
+  await sleep(300);
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-window"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-window-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(150);
+  }
   await exec(tabId, (hasWindow) => {
     const target = hasWindow ? "Available" : "Not Available";
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-window-options"] span'))
       .find(s => s.textContent.trim() === target)?.closest('div').click();
   }, [room.windowType !== -100]);
-  await sleep(800);
+  await sleep(300);
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-view"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid="select-rs-room-view-queryinput"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
   await exec(tabId, (view) => {
     const input = document.querySelector('[data-testid="select-rs-room-view-queryinput"]');
     if (!input) return;
@@ -960,35 +979,52 @@ async function teraFillOneRoom(tabId, room, roomType) {
     setter.call(input, view);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }, [room.roomView || "No Special View"]);
-  await sleep(500);
+  while (true) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-view-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(150);
+  }
   await exec(tabId, (view) => {
     const opts = document.querySelectorAll('[data-testid="select-rs-room-view-options"] span');
     const found = Array.from(opts).find(s => s.textContent.trim() === view);
     const fallback = Array.from(opts).find(s => s.textContent.trim() === 'No Special View');
     (found || fallback)?.closest('div').click();
   }, [room.roomView || "No Special View"]);
-  await sleep(500);
+  await sleep(300);
 
   await exec(tabId, () => document.querySelector('[data-testid="button-rs-room-open-bed-settings"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid="radio-option-single-bedroom"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
 
   const hasMultipleBedrooms = (room.bedText || '').includes(' || ');
 
   if (hasMultipleBedrooms) {
     // Multiple Bedrooms: click left-side radio first, then fill each bedroom
     await exec(tabId, () => document.querySelector('[data-testid="radio-option-multiple-bedrooms"]')?.click());
-    await sleep(600);
+    while (true) {
+      const r = await exec(tabId, () => document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length);
+      if ((r?.[0]?.result || 0) > 0) break;
+      await sleep(150);
+    }
 
     const bedroomTexts = room.bedText.split(' || ');
     // Tera creates 2 bedrooms by default when switching to Multiple Bedrooms,
     // so only click "Add Another Bedroom" when the index exceeds what already exists.
-    let existingBedrooms = await exec(tabId, () =>
+    let existingBedrooms = (await exec(tabId, () =>
       document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length
-    );
+    ))?.[0]?.result || 0;
     for (let brIdx = 0; brIdx < bedroomTexts.length; brIdx++) {
       if (brIdx >= existingBedrooms) {
+        const countBefore = existingBedrooms;
         await exec(tabId, () => document.querySelector('[data-testid="button-add-another-bedroom"]')?.click());
-        await sleep(400);
+        while (true) {
+          const r = await exec(tabId, () => document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length);
+          if ((r?.[0]?.result || 0) > countBefore) break;
+          await sleep(150);
+        }
         existingBedrooms++;
       }
       const brText = bedroomTexts[brIdx];
@@ -1000,7 +1036,11 @@ async function teraFillOneRoom(tabId, room, roomType) {
           const wrap = fixedInput?.parentElement?.parentElement?.parentElement?.parentElement;
           wrap?.querySelector('input[value="MULTIPLE"]')?.click();
         }, [brIdx]);
-        await sleep(500);
+        while (true) {
+          const r = await exec(tabId, (brIdx) => !!document.querySelector(`[data-testid="select-multiple-bed-arrangement-${brIdx}-0"]`), [brIdx]);
+          if (r?.[0]?.result) break;
+          await sleep(150);
+        }
         const brBeds = brText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
         await exec(tabId, async (beds, brIdx) => {
           const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -1057,9 +1097,9 @@ async function teraFillOneRoom(tabId, room, roomType) {
       await sleep(400);
     }
     // Remove any extra bedrooms beyond what's needed (e.g. accidentally added too many)
-    const totalBedrooms = await exec(tabId, () =>
+    const totalBedrooms = (await exec(tabId, () =>
       document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length
-    );
+    ))?.[0]?.result || 0;
     for (let i = totalBedrooms; i > bedroomTexts.length; i--) {
       await exec(tabId, () => {
         const btns = Array.from(document.querySelectorAll('button'))
@@ -1072,7 +1112,11 @@ async function teraFillOneRoom(tabId, room, roomType) {
     // Single Bedroom: click left-side radio, then set arrangement
     const hasOr = (room.bedText || '').toLowerCase().includes(' or ');
     await exec(tabId, () => document.querySelector('[data-testid="radio-option-single-bedroom"]')?.click());
-    await sleep(500);
+    while (true) {
+      const r = await exec(tabId, () => !!document.querySelector('[data-testid="radio-option-fixed-arrangement-0"]'));
+      if (r?.[0]?.result) break;
+      await sleep(150);
+    }
 
     if (hasOr) {
       await exec(tabId, () => {
@@ -1080,7 +1124,11 @@ async function teraFillOneRoom(tabId, room, roomType) {
         const wrap = fixedInput?.parentElement?.parentElement?.parentElement?.parentElement;
         wrap?.querySelector('input[value="MULTIPLE"]')?.click();
       });
-      await sleep(800);
+      while (true) {
+        const r = await exec(tabId, () => !!document.querySelector('[data-testid="select-multiple-bed-arrangement-0-0"]'));
+        if (r?.[0]?.result) break;
+        await sleep(150);
+      }
       const allBeds = room.bedText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
       await exec(tabId, async (beds) => {
         const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -1138,7 +1186,11 @@ async function teraFillOneRoom(tabId, room, roomType) {
   await sleep(500);
 
   await exec(tabId, () => document.querySelector('[data-testid="button-add-facilities"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid^="checkbox-facility-"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
   const facilityStr = (() => {
     const fromScan = (room.facilityStr || '').split(',').map(c => c.trim()).filter(Boolean);
     if (room.country === 'KR') {
@@ -1154,14 +1206,22 @@ async function teraFillOneRoom(tabId, room, roomType) {
       if (cb && !cb.checked) cb.click();
     }
   }, [facilityStr]);
-  await sleep(500);
+  await sleep(200);
   await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
-  await sleep(500);
+  await sleep(200);
   await exec(tabId, () => document.querySelector('[data-testid="button-modal-save"]')?.click());
-  await sleep(500);
+  while (true) {
+    const r = await exec(tabId, () => !document.querySelector('[data-testid="button-modal-save"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-gender"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-gender-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(150);
+  }
   await exec(tabId, (name) => {
     const lower = name.toLowerCase();
     const target = (lower.includes('male only') || (lower.includes('male') && !lower.includes('female'))) ? 'Male Only'
@@ -1169,22 +1229,30 @@ async function teraFillOneRoom(tabId, room, roomType) {
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-gender-options"] span'))
       .find(s => s.textContent.trim() === target)?.closest('div').click();
   }, [room.roomName || ""]);
-  await sleep(500);
+  await sleep(300);
 
   await exec(tabId, () => document.querySelector('[data-testid="select-rs-room-smoking"]')?.click());
-  await sleep(800);
+  while (true) {
+    const r = await exec(tabId, () => document.querySelectorAll('[data-testid="select-rs-room-smoking-options"] span').length);
+    if ((r?.[0]?.result || 0) > 0) break;
+    await sleep(150);
+  }
   await exec(tabId, (smoking) => {
     const target = smoking === 'YES' ? 'Smoking' : 'Non-Smoking';
     Array.from(document.querySelectorAll('[data-testid="select-rs-room-smoking-options"] span'))
       .find(s => s.textContent.trim() === target)?.closest('div').click();
   }, [room.smoking || 'NO']);
-  await sleep(500);
+  await sleep(300);
 
   await exec(tabId, () => {
     const cb = document.querySelector('[data-testid="checkbox-rs-room-customizable-name"]');
     if (cb && !cb.checked) cb.click();
   });
-  await sleep(500);
+  while (true) {
+    const r = await exec(tabId, () => !!document.querySelector('[data-testid="input-rs-room-custom-name"]'));
+    if (r?.[0]?.result) break;
+    await sleep(150);
+  }
   await exec(tabId, (name) => {
     const input = document.querySelector('[data-testid="input-rs-room-custom-name"]');
     if (!input) return;
@@ -2644,6 +2712,8 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
         await sleep(300);
       }
       await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
+      // Save 처리 후 redirect 시작까지 여유 시간
+      await sleep(2000);
       // /form/ URL 벗어날 때까지 대기
       while (true) {
         const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
