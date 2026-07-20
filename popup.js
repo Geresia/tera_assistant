@@ -570,7 +570,10 @@ function matchRoomType(roomName) {
   return ROOM_TYPE_OPTIONS.find(o => name.includes(o.toLowerCase())) || "Standard";
 }
 
+let autoMode = false;
+
 function waitForContinue(roomName, isError = false) {
+  if (autoMode) return Promise.resolve();
   return new Promise(resolve => {
     const box = document.getElementById('pauseBox');
     const msgEl = document.getElementById('pauseMsg');
@@ -2681,8 +2684,9 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 });
 
 
-// Selectfill (선택한 방만 처리)
-document.getElementById("selectFillBtn").addEventListener("click", async () => {
+// Fill (Full Auto / Manual)
+async function runFill(isAuto) {
+  autoMode = isAuto;
   const selected = Array.from(document.querySelectorAll(".room-cb:checked")).map(cb => roomData[parseInt(cb.dataset.index)]);
   if (selected.length === 0) { setTeraStatus(currentLang === 'kr' ? "선택된 방이 없어요." : "No rooms selected.", "error"); return; }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -2692,8 +2696,8 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
     setTeraStatus("Check if this is a correct hotel. Press again to start.");
     return;
   }
-  const btn = document.getElementById("selectFillBtn");
-  btn.disabled = true;
+  const fillBtn = document.getElementById("selectFillBtn");
+  fillBtn.disabled = true;
   try {
     for (let i = 0; i < selected.length; i++) {
       const room = selected[i];
@@ -2734,8 +2738,23 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
   } catch (err) {
     setTeraStatus(t().teraError(err.message), "error");
   }
-  btn.disabled = false;
+  fillBtn.disabled = false;
+}
+
+const fillPopup = document.getElementById("fillPopup");
+document.getElementById("selectFillBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  fillPopup.style.display = fillPopup.style.display === "block" ? "none" : "block";
 });
+document.getElementById("fullAutoBtn").addEventListener("click", () => {
+  fillPopup.style.display = "none";
+  runFill(true);
+});
+document.getElementById("manualFillBtn").addEventListener("click", () => {
+  fillPopup.style.display = "none";
+  runFill(false);
+});
+document.addEventListener("click", () => { fillPopup.style.display = "none"; });
 
 // ===== 사진 업로드 (Trip → Tera) =====
 // 방 사진 URL들을 popup에서 fetch → base64 배열로 (CSP 회피)

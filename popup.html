@@ -391,6 +391,18 @@
       box-shadow: 0 0 0 2px rgba(255,59,48,0.08);
     }
 
+    /* Fill popup */
+    #fillPopup { display:none; position:absolute; bottom:calc(100% + 5px); left:0; right:0; background:#fff; border:0.5px solid #d1d1d6; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.13); overflow:hidden; z-index:200; }
+    #fillPopup button { display:block; width:100%; padding:9px 13px; text-align:left; border:none; background:none; font-size:12px; font-weight:600; color:#1d1d1f; cursor:pointer; font-family:inherit; }
+    #fillPopup button:hover { background:#f5f5f7; }
+    #fillPopup button + button { border-top:0.5px solid #e5e5ea; }
+    @media (prefers-color-scheme: dark) {
+      #fillPopup { background:#2c2c2e; border-color:#3a3a3c; }
+      #fillPopup button { color:#f5f5f7; }
+      #fillPopup button:hover { background:#3a3a3c; }
+      #fillPopup button + button { border-top-color:#3a3a3c; }
+    }
+
     /* Pause Box */
     #pauseBox {
       display: none;
@@ -666,7 +678,13 @@
       <button class="btn-primary" id="startBtn" style="grid-column: span 2;"></button>
     </div>
     <div class="btn-row">
-      <button class="btn-dark" id="selectFillBtn" style="display:none;">Fill</button>
+      <div style="position:relative;">
+        <button class="btn-dark" id="selectFillBtn" style="display:none; width:100%;">Fill</button>
+        <div id="fillPopup">
+          <button id="fullAutoBtn" title="Finish it without stop except error">Full Auto</button>
+          <button id="manualFillBtn" title="Stop with each room">Manual</button>
+        </div>
+      </div>
       <button class="btn-gray" id="photoZipBtn" style="display:none;"><span style="display:flex; align-items:center; justify-content:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>IMAGE</span></button>
     </div>
     <button class="btn-primary" id="hotelPhotoBtn" style="display:none; margin-top:6px; width:100%;">Hotel Photos Insert</button>
