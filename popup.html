@@ -585,6 +585,13 @@
     </div>
   </div>
 
+  <!-- ===== WiFi Warning Banner ===== -->
+  <div id="wifiBanner" style="display:none; background:#FEF3C7; border-bottom:1px solid #F59E0B; padding:6px 12px; font-size:11px; color:#92400E; display:none; align-items:center; gap:6px;">
+    <span>⚠</span>
+    <span id="wifiBannerText">WiFi가 느립니다. 작업이 오래 걸릴 수 있어요.</span>
+    <button onclick="document.getElementById('wifiBanner').style.display='none'" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:13px; color:#92400E;">✕</button>
+  </div>
+
   <!-- ===== Image Lightbox ===== -->
   <div id="imgLightbox">
     <img id="imgLightboxImg" alt="">

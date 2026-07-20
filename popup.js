@@ -589,9 +589,23 @@ function waitForContinue(roomName, isError = false) {
   });
 }
 
+function showWifiBanner(ms) {
+  const banner = document.getElementById('wifiBanner');
+  const text = document.getElementById('wifiBannerText');
+  if (!banner) return;
+  const msg = currentLang === 'kr'
+    ? `WiFi가 느립니다 (${ms}ms). 작업이 오래 걸릴 수 있어요.`
+    : `Slow WiFi detected (${ms}ms). Operations may take longer.`;
+  text.textContent = msg;
+  banner.style.display = 'flex';
+}
+
 async function checkForUpdates() {
   try {
+    const t0 = Date.now();
     const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
+    const elapsed = Date.now() - t0;
+    if (elapsed > 2000) showWifiBanner(elapsed);
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
       const modal = document.getElementById('updateModal');
