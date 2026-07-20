@@ -1746,13 +1746,24 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const roomList = document.getElementById("roomList");
     roomList.innerHTML = `<div class="room-item"><label class="room-check-all"><input type="checkbox" id="checkAll" checked> All</label></div>`;
     finalRooms.forEach((room, i) => {
-      const editBeds = (room.bedText || '').split(/\s+and\s+/i).map(part => {
-        const m = part.trim().match(/^(\d+)\s+(.+?)\s+beds?/i);
-        if (!m) return null;
-        const type = BED_TYPES.find(t => t.toLowerCase() === m[2].trim().toLowerCase()) || 'Double';
-        return { count: parseInt(m[1]) || 1, type };
-      }).filter(Boolean);
-      if (!editBeds.length) editBeds.push({ count: 1, type: 'Double' });
+      // Parse bedrooms from bedText (" || " separates bedrooms)
+      const parseBedroomText = (text) => {
+        const hasOr = (text || '').includes(' or ');
+        const beds = (text || '').split(hasOr ? / or /i : /\s+and\s+/i).map(part => {
+          const m = part.trim().match(/^(\d+)\s+(.+?)\s+beds?/i);
+          if (!m) return null;
+          const type = BED_TYPES.find(t => t.toLowerCase() === m[2].trim().toLowerCase()) || 'Double';
+          return { count: parseInt(m[1]) || 1, type };
+        }).filter(Boolean);
+        return { isMultiple: hasOr, beds: beds.length ? beds : [{ count: 1, type: 'Double' }] };
+      };
+
+      const hasMultipleBedrooms = (room.bedText || '').includes(' || ');
+      let isMultipleBedrooms = hasMultipleBedrooms;
+      const editBedrooms = (hasMultipleBedrooms
+        ? (room.bedText || '').split(' || ')
+        : [room.bedText || '']
+      ).map(parseBedroomText);
 
       const initSize = room.sizeText?.match(/[\d.]+/)?.[0] || '';
 
@@ -1768,7 +1779,13 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           <div class="room-edit-field"><span class="room-edit-label">Name</span><input class="room-edit-input" data-field="roomName"></div>
           <div class="room-edit-field" style="align-items:flex-start">
             <span class="room-edit-label" style="padding-top:5px">Bed</span>
-            <div class="bed-edit-wrap"></div>
+            <div style="flex:1">
+              <div style="display:flex;gap:4px;margin-bottom:8px">
+                <button class="bed-mode-btn${!isMultipleBedrooms ? ' active' : ''}" data-mode="single" type="button">Single Bedroom</button>
+                <button class="bed-mode-btn${isMultipleBedrooms ? ' active' : ''}" data-mode="multi-bedroom" type="button">Multiple Bedrooms</button>
+              </div>
+              <div class="bedrooms-wrap"></div>
+            </div>
           </div>
           <div class="room-edit-field">
             <span class="room-edit-label">Size</span>
@@ -1783,60 +1800,118 @@ document.getElementById("startBtn").addEventListener("click", async () => {
       entry.querySelector('[data-field="sizeText"]').value = initSize;
       entry.querySelector('[data-field="maxAdults"]').value = room.maxAdults || 2;
 
-      const bedWrap = entry.querySelector('.bed-edit-wrap');
+      const bedroomsWrap = entry.querySelector('.bedrooms-wrap');
+
       const syncBeds = () => {
-        roomData[i].bedText = editBeds.map(b => `${b.count} ${b.type} bed`).join(' and ');
+        const encoded = editBedrooms.map(br =>
+          br.beds.map(b => `${b.count} ${b.type} bed`).join(br.isMultiple ? ' or ' : ' and ')
+        );
+        roomData[i].bedText = isMultipleBedrooms ? encoded.join(' || ') : encoded[0];
         chrome.storage.session.set({ roomData });
       };
-      const renderBedRows = () => {
-        bedWrap.innerHTML = '';
-        editBeds.forEach((bed, bi) => {
+
+      const renderBedRows = (br, wrap) => {
+        wrap.innerHTML = '';
+        br.beds.forEach((bed, bi) => {
           const row = document.createElement('div');
           row.className = 'bed-row';
           row.innerHTML = `
             <div class="bed-count-row">
               <input class="room-edit-input bed-count-input" type="number" min="1" max="10" value="${bed.count}">
               <span class="bed-unit-label">bed(s)</span>
-              ${editBeds.length > 1 ? `<button class="bed-remove-btn" type="button">×</button>` : ''}
+              ${br.beds.length > 1 ? `<button class="bed-remove-btn" type="button">×</button>` : ''}
             </div>
             <div class="bed-type-grid">
               ${BED_TYPES.map(t => `<button class="bed-type-btn${bed.type === t ? ' active' : ''}" type="button" data-type="${t}">${t}</button>`).join('')}
             </div>`;
           row.querySelector('.bed-count-input').addEventListener('change', (e) => {
-            editBeds[bi].count = parseInt(e.target.value) || 1;
-            syncBeds();
+            br.beds[bi].count = parseInt(e.target.value) || 1; syncBeds();
           });
           row.querySelectorAll('.bed-type-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
               e.stopPropagation();
-              editBeds[bi].type = btn.dataset.type;
+              br.beds[bi].type = btn.dataset.type;
               row.querySelectorAll('.bed-type-btn').forEach(b => b.classList.toggle('active', b === btn));
               syncBeds();
             });
           });
-          if (editBeds.length > 1) {
+          if (br.beds.length > 1) {
             row.querySelector('.bed-remove-btn').addEventListener('click', (e) => {
-              e.stopPropagation();
-              editBeds.splice(bi, 1);
-              renderBedRows();
-              syncBeds();
+              e.stopPropagation(); br.beds.splice(bi, 1); renderBedRows(br, wrap); syncBeds();
             });
           }
-          bedWrap.appendChild(row);
+          wrap.appendChild(row);
         });
-        const addBtn = document.createElement('button');
-        addBtn.type = 'button';
-        addBtn.className = 'bed-add-btn';
-        addBtn.textContent = '+ Add bed type';
-        addBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          editBeds.push({ count: 1, type: 'Double' });
-          renderBedRows();
-          syncBeds();
-        });
-        bedWrap.appendChild(addBtn);
+        if (!(br.isMultiple && br.beds.length >= 2)) {
+          const addBtn = document.createElement('button');
+          addBtn.type = 'button'; addBtn.className = 'bed-add-btn';
+          addBtn.textContent = '+ Add bed type';
+          addBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); br.beds.push({ count: 1, type: 'Double' }); renderBedRows(br, wrap); syncBeds();
+          });
+          wrap.appendChild(addBtn);
+        }
       };
-      renderBedRows();
+
+      const renderBedroom = (br, idx) => {
+        const sec = document.createElement('div');
+        sec.className = 'bedroom-section';
+        sec.innerHTML = `
+          <div class="bedroom-header">
+            ${isMultipleBedrooms ? `<span class="bedroom-label">Bedroom ${idx + 1}</span>` : ''}
+            <div style="display:flex;gap:4px;${isMultipleBedrooms ? 'flex:1;' : ''}">
+              <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed</button>
+              <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed</button>
+            </div>
+            ${isMultipleBedrooms && editBedrooms.length > 1 ? `<button class="bedroom-remove-btn" type="button">×</button>` : ''}
+          </div>
+          <div class="bed-edit-wrap"></div>`;
+        sec.querySelectorAll('.bed-mode-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            br.isMultiple = btn.dataset.mode === 'multiple';
+            sec.querySelectorAll('.bed-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+            syncBeds();
+          });
+        });
+        if (isMultipleBedrooms && editBedrooms.length > 1) {
+          sec.querySelector('.bedroom-remove-btn').addEventListener('click', (e) => {
+            e.stopPropagation(); editBedrooms.splice(idx, 1); renderAllBedrooms(); syncBeds();
+          });
+        }
+        renderBedRows(br, sec.querySelector('.bed-edit-wrap'));
+        return sec;
+      };
+
+      const renderAllBedrooms = () => {
+        bedroomsWrap.innerHTML = '';
+        editBedrooms.forEach((br, idx) => bedroomsWrap.appendChild(renderBedroom(br, idx)));
+        if (isMultipleBedrooms) {
+          const addBr = document.createElement('button');
+          addBr.type = 'button'; addBr.className = 'bed-add-btn';
+          addBr.textContent = '+ Add bedroom';
+          addBr.addEventListener('click', (e) => {
+            e.stopPropagation();
+            editBedrooms.push({ isMultiple: false, beds: [{ count: 1, type: 'Double' }] });
+            renderAllBedrooms(); syncBeds();
+          });
+          bedroomsWrap.appendChild(addBr);
+        }
+      };
+
+      entry.querySelectorAll('.bed-mode-btn[data-mode="single"], .bed-mode-btn[data-mode="multi-bedroom"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          isMultipleBedrooms = btn.dataset.mode === 'multi-bedroom';
+          entry.querySelectorAll('.bed-mode-btn[data-mode="single"], .bed-mode-btn[data-mode="multi-bedroom"]').forEach(b => b.classList.toggle('active', b === btn));
+          if (isMultipleBedrooms && editBedrooms.length === 1) {
+            editBedrooms.push({ isMultiple: false, beds: [{ count: 1, type: 'Double' }] });
+          }
+          renderAllBedrooms(); syncBeds();
+        });
+      });
+
+      renderAllBedrooms();
 
       entry.querySelector('[data-field="roomName"]').addEventListener('change', (e) => {
         roomData[i].roomName = e.target.value;
