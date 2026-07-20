@@ -1897,7 +1897,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
       if (!agoda?.propertyName) { setExtractStatus('Agoda 페이지를 새로고침 후 다시 시도해주세요.', "error"); return; }
 
       await exec(tab.id, (personName) => {
-        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzJw0zPaNbeh3dpygO393HkmQVvlpCXkVpIcySbxGqFBqLyyWQiCHWRCI2C8KUfyKAm/exec";
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
         const agoda = window.__teraAgodaRooms;
         const text = document.body?.innerText || "";
 
@@ -2034,7 +2034,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 
     // Sheet 전송
        await exec(tab.id, (d, personName) => {
-      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzJw0zPaNbeh3dpygO393HkmQVvlpCXkVpIcySbxGqFBqLyyWQiCHWRCI2C8KUfyKAm/exec";
+      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
       const hotelFacilityMap = [
         {keywords:["24-hour front desk","front desk [24-hour]","24 hour front desk"],code:"HAS_24_HOUR_FRONT_DESK"},
         {keywords:["wi-fi in public areas","free wi-fi","wi-fi in all rooms","wifi in public"],code:"WIFI_PUBLIC_AREA"},
