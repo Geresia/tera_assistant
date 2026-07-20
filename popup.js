@@ -302,7 +302,7 @@ function renderHotelPreview(data) {
 }
 
 // ── Constants ──
-const CURRENT_VERSION = "5.51";
+const CURRENT_VERSION = "5.6";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -847,13 +847,10 @@ async function teraFillOneRoom(tabId, room, roomType) {
       if (div.textContent.trim() === "Create New Room" && div.children.length <= 2) { div.click(); return; }
     }
   });
-  await sleep(3500);
-
-  // Room Type 드롭다운이 실제로 뜰 때까지 polling
-  let roomTypeReady = false;
-  for (let i = 0; i < 16; i++) {
+  // Room Type 드롭다운이 뜰 때까지 무한 대기
+  while (true) {
     const r = await exec(tabId, () => !!document.querySelector('[data-testid="select-rs-room-roomtype"]'));
-    if (r?.[0]?.result) { roomTypeReady = true; break; }
+    if (r?.[0]?.result) break;
     await sleep(300);
   }
 
@@ -948,72 +945,168 @@ async function teraFillOneRoom(tabId, room, roomType) {
   await exec(tabId, () => document.querySelector('[data-testid="button-rs-room-open-bed-settings"]')?.click());
   await sleep(800);
 
-  const hasOr = (room.bedText || '').toLowerCase().includes(' or ');
-  await exec(tabId, () => document.querySelector('[data-testid="radio-option-single-bedroom"]')?.click());
-  await sleep(500);
+  const hasMultipleBedrooms = (room.bedText || '').includes(' || ');
 
-  if (hasOr) {
-    await exec(tabId, () => {
-      for (const span of document.querySelectorAll('span.css-1rlnnbz')) {
-        if (span.textContent.trim() === 'Multiple Bed Arrangement') {
-          span.closest('label').querySelector('input[type="radio"]')?.click();
-          return;
-        }
+  if (hasMultipleBedrooms) {
+    // Multiple Bedrooms: click left-side radio first, then fill each bedroom
+    await exec(tabId, () => document.querySelector('[data-testid="radio-option-multiple-bedrooms"]')?.click());
+    await sleep(600);
+
+    const bedroomTexts = room.bedText.split(' || ');
+    // Tera creates 2 bedrooms by default when switching to Multiple Bedrooms,
+    // so only click "Add Another Bedroom" when the index exceeds what already exists.
+    let existingBedrooms = await exec(tabId, () =>
+      document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length
+    );
+    for (let brIdx = 0; brIdx < bedroomTexts.length; brIdx++) {
+      if (brIdx >= existingBedrooms) {
+        await exec(tabId, () => document.querySelector('[data-testid="button-add-another-bedroom"]')?.click());
+        await sleep(400);
+        existingBedrooms++;
       }
-    });
-    await sleep(800);
-    const allBeds = room.bedText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
-    await exec(tabId, async (beds) => {
-      const delay = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < beds.length; i++) {
-        document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}"]`)?.click();
-        await delay(400);
-        const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}-queryinput"]`);
-        if (input) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(input, beds[i].type);
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          await delay(400);
-          Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-0-${i}-options"] span`))
-            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
-          await delay(300);
-        }
-        const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-0-${i}"]`);
-        if (countInput) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(countInput, beds[i].count);
-          countInput.dispatchEvent(new Event('input', { bubbles: true }));
-          countInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+      const brText = bedroomTexts[brIdx];
+      const brHasOr = brText.toLowerCase().includes(' or ');
+
+      if (brHasOr) {
+        await exec(tabId, (brIdx) => {
+          const fixedInput = document.querySelector(`[data-testid="radio-option-fixed-arrangement-${brIdx}"]`);
+          const wrap = fixedInput?.parentElement?.parentElement?.parentElement?.parentElement;
+          wrap?.querySelector('input[value="MULTIPLE"]')?.click();
+        }, [brIdx]);
+        await sleep(500);
+        const brBeds = brText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
+        await exec(tabId, async (beds, brIdx) => {
+          const delay = ms => new Promise(r => setTimeout(r, ms));
+          for (let i = 0; i < beds.length; i++) {
+            document.querySelector(`[data-testid="select-multiple-bed-arrangement-${brIdx}-${i}"]`)?.click();
+            await delay(400);
+            const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-${brIdx}-${i}-queryinput"]`);
+            if (input) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              setter.call(input, beds[i].type);
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              await delay(400);
+              Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-${brIdx}-${i}-options"] span`))
+                .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+              await delay(300);
+            }
+            const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-${brIdx}-${i}"]`);
+            if (countInput) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              setter.call(countInput, beds[i].count);
+              countInput.dispatchEvent(new Event('input', { bubbles: true }));
+              countInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+        }, [brBeds, brIdx]);
+      } else {
+        const brBeds = parseBeds(brText);
+        await exec(tabId, async (beds, brIdx) => {
+          const delay = ms => new Promise(r => setTimeout(r, ms));
+          for (let i = 0; i < beds.length; i++) {
+            if (i > 0) { document.querySelector(`[data-testid="button-add-another-bedtype-${brIdx}"]`)?.click(); await delay(400); }
+            document.querySelector(`[data-testid="select-bedtype-fixed-${brIdx}-${i}"]`)?.click();
+            await delay(400);
+            const input = document.querySelector(`[data-testid="select-bedtype-fixed-${brIdx}-${i}-queryinput"]`);
+            if (input) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              setter.call(input, beds[i].type);
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              await delay(400);
+              Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-${brIdx}-${i}-options"] span`))
+                .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+              await delay(300);
+            }
+            const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-${brIdx}-${i}"]`);
+            if (countInput) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              setter.call(countInput, beds[i].count);
+              countInput.dispatchEvent(new Event('input', { bubbles: true }));
+              countInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+        }, [brBeds, brIdx]);
       }
-    }, [allBeds]);
+      await sleep(400);
+    }
+    // Remove any extra bedrooms beyond what's needed (e.g. accidentally added too many)
+    const totalBedrooms = await exec(tabId, () =>
+      document.querySelectorAll('[data-testid^="radio-option-fixed-arrangement-"]').length
+    );
+    for (let i = totalBedrooms; i > bedroomTexts.length; i--) {
+      await exec(tabId, () => {
+        const btns = Array.from(document.querySelectorAll('button'))
+          .filter(b => b.textContent.trim() === 'Remove This Bedroom');
+        btns[btns.length - 1]?.click();
+      });
+      await sleep(400);
+    }
   } else {
-    const beds = parseBeds(room.bedText);
-    await exec(tabId, async (beds) => {
-      const delay = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < beds.length; i++) {
-        if (i > 0) { document.querySelector('[data-testid="button-add-another-bedtype-0"]')?.click(); await delay(400); }
-        document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}"]`)?.click();
-        await delay(400);
-        const input = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}-queryinput"]`);
-        if (input) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(input, beds[i].type);
-          input.dispatchEvent(new Event('input', { bubbles: true }));
+    // Single Bedroom: click left-side radio, then set arrangement
+    const hasOr = (room.bedText || '').toLowerCase().includes(' or ');
+    await exec(tabId, () => document.querySelector('[data-testid="radio-option-single-bedroom"]')?.click());
+    await sleep(500);
+
+    if (hasOr) {
+      await exec(tabId, () => {
+        const fixedInput = document.querySelector('[data-testid="radio-option-fixed-arrangement-0"]');
+        const wrap = fixedInput?.parentElement?.parentElement?.parentElement?.parentElement;
+        wrap?.querySelector('input[value="MULTIPLE"]')?.click();
+      });
+      await sleep(800);
+      const allBeds = room.bedText.split(/ or /i).map(s => s.trim()).flatMap(a => parseBeds(a));
+      await exec(tabId, async (beds) => {
+        const delay = ms => new Promise(r => setTimeout(r, ms));
+        for (let i = 0; i < beds.length; i++) {
+          document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}"]`)?.click();
           await delay(400);
-          Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-0-${i}-options"] span`))
-            .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
-          await delay(300);
+          const input = document.querySelector(`[data-testid="select-multiple-bed-arrangement-0-${i}-queryinput"]`);
+          if (input) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(input, beds[i].type);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await delay(400);
+            Array.from(document.querySelectorAll(`[data-testid="select-multiple-bed-arrangement-0-${i}-options"] span`))
+              .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+            await delay(300);
+          }
+          const countInput = document.querySelector(`[data-testid="input-multiple-bed-arrangement-0-${i}"]`);
+          if (countInput) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(countInput, beds[i].count);
+            countInput.dispatchEvent(new Event('input', { bubbles: true }));
+            countInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }
-        const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-0-${i}"]`);
-        if (countInput) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(countInput, beds[i].count);
-          countInput.dispatchEvent(new Event('input', { bubbles: true }));
-          countInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }, [allBeds]);
+    } else {
+      const beds = parseBeds(room.bedText);
+      await exec(tabId, async (beds) => {
+        const delay = ms => new Promise(r => setTimeout(r, ms));
+        for (let i = 0; i < beds.length; i++) {
+          if (i > 0) { document.querySelector('[data-testid="button-add-another-bedtype-0"]')?.click(); await delay(400); }
+          document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}"]`)?.click();
+          await delay(400);
+          const input = document.querySelector(`[data-testid="select-bedtype-fixed-0-${i}-queryinput"]`);
+          if (input) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(input, beds[i].type);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await delay(400);
+            Array.from(document.querySelectorAll(`[data-testid="select-bedtype-fixed-0-${i}-options"] span`))
+              .find(s => s.textContent.trim() === beds[i].type)?.closest('div').click();
+            await delay(300);
+          }
+          const countInput = document.querySelector(`[data-testid="input-numberofbeds-fixed-0-${i}"]`);
+          if (countInput) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(countInput, beds[i].count);
+            countInput.dispatchEvent(new Event('input', { bubbles: true }));
+            countInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }
-      }
-    }, [beds]);
+      }, [beds]);
+    }
   }
   await sleep(500);
 
@@ -1857,13 +1950,14 @@ document.getElementById("startBtn").addEventListener("click", async () => {
         const sec = document.createElement('div');
         sec.className = 'bedroom-section';
         sec.innerHTML = `
-          <div class="bedroom-header">
-            ${isMultipleBedrooms ? `<span class="bedroom-label">Bedroom ${idx + 1}</span>` : ''}
-            <div style="display:flex;gap:4px;${isMultipleBedrooms ? 'flex:1;' : ''}">
-              <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed Arrangement</button>
-              <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed Arrangement</button>
-            </div>
-            ${isMultipleBedrooms && editBedrooms.length > 1 ? `<button class="bedroom-remove-btn" type="button">×</button>` : ''}
+          ${isMultipleBedrooms ? `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span class="bedroom-label">Bedroom ${idx + 1}</span>
+            ${editBedrooms.length > 1 ? `<button class="bedroom-remove-btn" type="button">×</button>` : ''}
+          </div>` : ''}
+          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">
+            <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed Arrangement</button>
+            <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed Arrangement</button>
           </div>
           <div class="bed-edit-wrap"></div>`;
         sec.querySelectorAll('.bed-mode-btn').forEach(btn => {
@@ -1885,8 +1979,28 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
       const renderAllBedrooms = () => {
         bedroomsWrap.innerHTML = '';
-        editBedrooms.forEach((br, idx) => bedroomsWrap.appendChild(renderBedroom(br, idx)));
-        if (isMultipleBedrooms) {
+        if (!isMultipleBedrooms) {
+          const br = editBedrooms[0];
+          const arrangCol = document.createElement('div');
+          arrangCol.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-bottom:8px';
+          arrangCol.innerHTML = `
+            <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed Arrangement</button>
+            <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed Arrangement</button>`;
+          bedroomsWrap.appendChild(arrangCol);
+          const bedEditWrap = document.createElement('div');
+          bedroomsWrap.appendChild(bedEditWrap);
+          renderBedRows(br, bedEditWrap);
+          arrangCol.querySelectorAll('.bed-mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              br.isMultiple = btn.dataset.mode === 'multiple';
+              arrangCol.querySelectorAll('.bed-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+              renderBedRows(br, bedEditWrap);
+              syncBeds();
+            });
+          });
+        } else {
+          editBedrooms.forEach((br, idx) => bedroomsWrap.appendChild(renderBedroom(br, idx)));
           const addBr = document.createElement('button');
           addBr.type = 'button'; addBr.className = 'bed-add-btn';
           addBr.textContent = '+ Add bedroom';
@@ -2496,17 +2610,26 @@ document.getElementById("selectFillBtn").addEventListener("click", async () => {
       await classifyRoomPhotos(tab.id);
       await waitForContinue(room.roomName);
       await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click(), [], "MAIN");
-      await sleep(1500);
+      // Save 버튼 뜰 때까지 대기
+      while (true) {
+        const r = await exec(tab.id, () => !!Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save'));
+        if (r?.[0]?.result) break;
+        await sleep(300);
+      }
       await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
-      await sleep(3000);
+      // /form/ URL 벗어날 때까지 대기
       while (true) {
         const urlCheck = await exec(tab.id, () => window.location.href.includes('/form/'), [], "MAIN");
         if (!urlCheck?.[0]?.result) break;
         await waitForContinue(room.roomName, true);
         await exec(tab.id, () => document.querySelector('[data-testid="button-mainform-submit"]')?.click());
-        await sleep(1500);
+        while (true) {
+          const r = await exec(tab.id, () => !!Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save'));
+          if (r?.[0]?.result) break;
+          await sleep(300);
+        }
         await exec(tab.id, () => Array.from(document.querySelectorAll('.css-jr388n')).find(b => b.textContent.trim() === 'Save')?.click());
-        await sleep(3000);
+        await sleep(2000);
       }
       await sleep(800);
     }
@@ -2600,15 +2723,14 @@ async function uploadRoomPhotos(tabId, base64List) {
           await delay(80);
         }
 
-        // 프리뷰 모달(slick-slider)이 뜰 때까지 대기 (최대 5초)
+        // 프리뷰 모달(slick-slider)이 뜰 때까지 무한 대기
         let previewBtn = null;
-        for (let i = 0; i < 50; i++) {
+        while (true) {
           await delay(100);
           previewBtn = document.querySelector('[data-testid="button-upload-preview-photo"]');
           if (previewBtn && previewBtn.offsetParent) break;
           previewBtn = null;
         }
-        if (!previewBtn) return; // 프리뷰가 안 뜨면 이 사진은 건너뜀
 
         previewBtn.click();
 

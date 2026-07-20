@@ -1,11 +1,16 @@
 {
-  "version": "5.51",
+  "version": "5.6",
   "changelog": "",
   "notes": [
     {
-      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.51.png"],
-      "title": "Room Scan Preview with Edit",
-      "text": "Click ✎ on any room to edit name, bed type, size, and occupancy before filling.\nMulti-bed support (e.g. 1 Double and 3 Single) shown as separate rows."
+      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.6.png"],
+      "title": "Multiple Bedrooms Autofill",
+      "text": "Tera autofill now correctly handles Multiple Bedrooms rooms.\n- Clicks Multiple Bedrooms radio first before filling each bedroom\n- Detects and removes extra empty bedroom sections automatically"
+    },
+    {
+      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.6b.png"],
+      "title": "New Members Added",
+      "text": "Keti and Scott have been added to the Assigned To list."
     }
   ]
 }
