@@ -1860,8 +1860,8 @@ document.getElementById("startBtn").addEventListener("click", async () => {
           <div class="bedroom-header">
             ${isMultipleBedrooms ? `<span class="bedroom-label">Bedroom ${idx + 1}</span>` : ''}
             <div style="display:flex;gap:4px;${isMultipleBedrooms ? 'flex:1;' : ''}">
-              <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed</button>
-              <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed</button>
+              <button class="bed-mode-btn${!br.isMultiple ? ' active' : ''}" data-mode="fixed" type="button">Fixed Bed Arrangement</button>
+              <button class="bed-mode-btn${br.isMultiple ? ' active' : ''}" data-mode="multiple" type="button">Multiple Bed Arrangement</button>
             </div>
             ${isMultipleBedrooms && editBedrooms.length > 1 ? `<button class="bedroom-remove-btn" type="button">×</button>` : ''}
           </div>
