@@ -589,15 +589,28 @@ function waitForContinue(roomName, isError = false) {
   });
 }
 
-function showWifiBanner(ms) {
-  const banner = document.getElementById('wifiBanner');
-  const text = document.getElementById('wifiBannerText');
-  if (!banner) return;
-  const msg = currentLang === 'kr'
-    ? `WiFi가 느립니다 (${ms}ms). 작업이 오래 걸릴 수 있어요.`
-    : `Slow WiFi detected (${ms}ms). Operations may take longer.`;
-  text.textContent = msg;
-  banner.style.display = 'flex';
+function updateWifiIndicator(ms) {
+  const dot = document.getElementById('wifiDot');
+  const label = document.getElementById('wifiLabel');
+  const indicator = document.getElementById('wifiIndicator');
+  if (!dot || !label) return;
+  let color, text, title;
+  if (ms < 500) {
+    color = '#22c55e';
+    text = currentLang === 'kr' ? '빠름' : 'Fast';
+    title = `${ms}ms`;
+  } else if (ms < 2000) {
+    color = '#f59e0b';
+    text = currentLang === 'kr' ? '보통' : 'Average';
+    title = `${ms}ms`;
+  } else {
+    color = '#ef4444';
+    text = currentLang === 'kr' ? '느림' : 'Slow';
+    title = `${ms}ms — 작업이 오래 걸릴 수 있어요`;
+  }
+  dot.style.background = color;
+  label.textContent = text;
+  indicator.title = title;
 }
 
 async function checkForUpdates() {
@@ -605,7 +618,7 @@ async function checkForUpdates() {
     const t0 = Date.now();
     const res = await fetch(VERSION_CHECK_URL + "?t=" + Date.now());
     const elapsed = Date.now() - t0;
-    if (elapsed > 2000) showWifiBanner(elapsed);
+    updateWifiIndicator(elapsed);
     const data = await res.json();
     if (data.version && data.version !== CURRENT_VERSION) {
       const modal = document.getElementById('updateModal');

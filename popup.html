@@ -579,17 +579,16 @@
 
   <div class="header">
     <div class="title">Tera <em>Assistant</em></div>
-    <div class="lang-toggle">
-      <button class="lang-btn active" id="btnKR">KR</button>
-      <button class="lang-btn" id="btnEN">EN</button>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div id="wifiIndicator" title="" style="display:flex; align-items:center; gap:4px; font-size:10px; color:#687176;">
+        <div id="wifiDot" style="width:8px; height:8px; border-radius:50%; background:#d1d5db;"></div>
+        <span id="wifiLabel">...</span>
+      </div>
+      <div class="lang-toggle">
+        <button class="lang-btn active" id="btnKR">KR</button>
+        <button class="lang-btn" id="btnEN">EN</button>
+      </div>
     </div>
-  </div>
-
-  <!-- ===== WiFi Warning Banner ===== -->
-  <div id="wifiBanner" style="display:none; background:#FEF3C7; border-bottom:1px solid #F59E0B; padding:6px 12px; font-size:11px; color:#92400E; display:none; align-items:center; gap:6px;">
-    <span>⚠</span>
-    <span id="wifiBannerText">WiFi가 느립니다. 작업이 오래 걸릴 수 있어요.</span>
-    <button onclick="document.getElementById('wifiBanner').style.display='none'" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:13px; color:#92400E;">✕</button>
   </div>
 
   <!-- ===== Image Lightbox ===== -->
