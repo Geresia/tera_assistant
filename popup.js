@@ -2433,26 +2433,47 @@ const agodaExtractForDetail = async () => {
 
   data.name_en = agoda?.propertyName || document.querySelector('h1')?.innerText?.trim() || '';
 
-  // Check-in/out from room benefits
-  let checkIn = '14:00', checkOut = '12:00';
-  outer: for (const room of (agoda?.rooms || [])) {
-    for (const offer of (room.offers || [])) {
-      for (const b of (offer.benefits || [])) {
-        const cin = b.text?.match(/Check-in\s+(\d{1,2}:\d{2})/i);
-        const cout = b.text?.match(/Check-out\s+(\d{1,2}:\d{2})/i);
-        if (cin) checkIn = cin[1];
-        if (cout) checkOut = cout[1];
-        if (cin || cout) break outer;
+  // Extract times from DOM property-feature elements (primary source)
+  const featureTexts = {};
+  document.querySelectorAll('[data-element-name="property-feature"]').forEach(el => {
+    const leafSpans = [...el.querySelectorAll('span')].filter(s => s.children.length === 0);
+    const label = leafSpans[0]?.textContent?.trim().toLowerCase() || '';
+    const value = leafSpans[leafSpans.length - 1]?.textContent?.trim() || '';
+    if (label && value) featureTexts[label] = value;
+  });
+
+  let checkIn = featureTexts['check-in from'] || '';
+  let checkOut = featureTexts['check-out until'] || '';
+  let checkinEnd = featureTexts['reception open until'] || '';
+  let checkoutStart = featureTexts['check-out from'] || '';
+
+  // Fallback: room benefits API
+  if (!checkIn || !checkOut) {
+    outer: for (const room of (agoda?.rooms || [])) {
+      for (const offer of (room.offers || [])) {
+        for (const b of (offer.benefits || [])) {
+          const cin = b.text?.match(/Check-in\s+(\d{1,2}:\d{2})/i);
+          const cout = b.text?.match(/Check-out\s+(\d{1,2}:\d{2})/i);
+          if (cin && !checkIn) checkIn = cin[1];
+          if (cout && !checkOut) checkOut = cout[1];
+          if (checkIn && checkOut) break outer;
+        }
       }
     }
   }
-  if (checkIn === '14:00') { const m = text.match(/check.?in[:\s]+(\d{1,2}:\d{2})/i); if (m) checkIn = m[1]; }
-  if (checkOut === '12:00') { const m = text.match(/check.?out[:\s]+(\d{1,2}:\d{2})/i); if (m) checkOut = m[1]; }
-  data.checkin_time = checkIn;
-  data.checkout_time = checkOut;
-  data.checkin_end = '23:59';
-  data.checkout_start = '00:00';
-  data.front_desk_hours = "Yes";
+  if (!checkIn) { const m = text.match(/check.?in[:\s]+(\d{1,2}:\d{2})/i); if (m) checkIn = m[1]; }
+  if (!checkOut) { const m = text.match(/check.?out[:\s]+(\d{1,2}:\d{2})/i); if (m) checkOut = m[1]; }
+
+  // 24hr front desk: icon label "24-hour front desk" = Yes, "Reception open until HH:MM" = No
+  const fdIcon = document.querySelector('i.ficon-24hour-frontdesk');
+  const fdLabel = fdIcon?.closest('[data-element-name="property-feature"]')?.textContent || '';
+  const is24hr = fdIcon ? /24.hour front desk/i.test(fdLabel) : /24.hour front desk/i.test(text);
+  data.front_desk_hours = is24hr ? 'Yes' : 'No';
+
+  data.checkin_time = checkIn || '14:00';
+  data.checkout_time = checkOut || '12:00';
+  data.checkin_end = is24hr ? '23:59' : (checkinEnd || '23:59');
+  data.checkout_start = is24hr ? '00:00' : (checkoutStart || '00:00');
 
   // JSON-LD → local name, address, postal_code, country
   let address = '', postalCode = '', countryCode = '', localName = '';
