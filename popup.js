@@ -2153,6 +2153,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     document.getElementById("checkAll").addEventListener("change", (e) => {
       document.querySelectorAll(".room-cb").forEach(cb => cb.checked = e.target.checked);
     });
+    fillClickCount = 0;
     roomList.style.display = "block";
     document.getElementById("selectFillBtn").style.display = "block";
     document.getElementById("photoZipBtn").style.display = "block";
@@ -2741,10 +2742,16 @@ async function runFill(isAuto) {
   fillBtn.disabled = false;
 }
 
+let fillClickCount = 0;
 const fillPopup = document.getElementById("fillPopup");
 document.getElementById("selectFillBtn").addEventListener("click", (e) => {
   e.stopPropagation();
-  fillPopup.style.display = fillPopup.style.display === "block" ? "none" : "block";
+  fillClickCount++;
+  if (fillClickCount === 1) {
+    runFill(false);
+  } else {
+    fillPopup.style.display = fillPopup.style.display === "block" ? "none" : "block";
+  }
 });
 document.getElementById("fullAutoBtn").addEventListener("click", () => {
   fillPopup.style.display = "none";
