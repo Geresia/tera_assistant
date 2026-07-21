@@ -37,6 +37,14 @@
         }
       }
 
+      // Strategy 3: consent page — account already selected, just click Continue
+      if (!clicked) {
+        const continueBtn = [...document.querySelectorAll('button')].find(b =>
+          b.textContent.trim() === 'Continue'
+        );
+        if (continueBtn) { continueBtn.click(); clicked = true; break; }
+      }
+
       if (!clicked) await sleep(300);
     }
 
