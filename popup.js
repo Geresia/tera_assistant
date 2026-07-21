@@ -545,7 +545,7 @@ function setLang(lang) {
   const pauseLabel = document.getElementById('pauseLabel');
   if (pauseLabel) pauseLabel.textContent = lang === 'kr' ? '사진 업로드 완료 후' : 'Photo Upload';
   document.getElementById('fullAutoDesc').textContent = lang === 'kr' ? '에러 없으면 멈추지 않고 끝까지 자동 진행' : 'Runs to the end without stopping unless an error occurs';
-  document.getElementById('manualDesc').textContent = lang === 'kr' ? '방마다 확인 후 Continue 눌러야 다음으로' : 'Pauses after each room — press Continue to proceed';
+  document.getElementById('manualDesc').textContent = lang === 'kr' ? '방마다 확인 후 Continue 눌러야 다음으로' : 'Pauses after each room';
 }
 
 function setStatus(msg, type = "") {
