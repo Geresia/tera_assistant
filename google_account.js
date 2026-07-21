@@ -2,11 +2,11 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // Only activate when Google is authenticating for Traveloka
-  const isTraveloka =
-    window.location.href.includes('traveloka.com') ||
-    !!document.querySelector('[data-app-name="Traveloka"]') ||
-    !!document.querySelector('[data-app-display-name*="traveloka"]') ||
-    !!document.querySelector('[data-support-email*="traveloka"]');
+  let isTraveloka = false;
+  for (let i = 0; i < 20; i++) {
+    if (document.querySelector('[data-app-name="Traveloka"]')) { isTraveloka = true; break; }
+    await sleep(200);
+  }
   if (!isTraveloka) return;
 
   function toast(msg) {
@@ -36,18 +36,6 @@
       for (const el of candidates) {
         if (el.textContent.includes('@traveloka.com')) {
           el.click(); clicked = true; break;
-        }
-      }
-
-      // Strategy 3: consent page — account already selected, just click Continue
-      if (!clicked) {
-        const span = [...document.querySelectorAll('span')].find(s => s.textContent.trim() === 'Continue');
-        if (span) {
-          span.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-          span.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-          span.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-          clicked = true;
-          break;
         }
       }
 
