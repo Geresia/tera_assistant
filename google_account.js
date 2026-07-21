@@ -2,11 +2,9 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // Only activate when Google is authenticating for Traveloka
-  let isTraveloka = false;
-  for (let i = 0; i < 20; i++) {
-    if (document.querySelector('[data-app-name="Traveloka"]')) { isTraveloka = true; break; }
-    await sleep(200);
-  }
+  const isTraveloka =
+    window.location.href.includes('traveloka.com') ||
+    !!document.querySelector('[data-app-name="Traveloka"]');
   if (!isTraveloka) return;
 
   function toast(msg) {
