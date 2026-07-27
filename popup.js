@@ -302,7 +302,7 @@ function renderHotelPreview(data) {
 }
 
 // ── Constants ──
-const CURRENT_VERSION = "6.0";
+const CURRENT_VERSION = "5.9";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/Geresia/tera_assistant/main/version.json";
 const HOTEL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/edit?gid=191153574#gid=191153574";
 const TERA_HOTEL_DATA_URL = "https://tera.traveloka.com/data/hotel-data/";
@@ -2527,7 +2527,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 
     if (isBookingExtract) {
       const bookingRes = await exec(tab.id, (personName) => {
-        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-8HSlpjcpIKqNtpjt2GwJlNFtBoeBOrX7ubNMBsvVDU7p2nDEuZUHAL-98jHn7cpq8A/exec";
         const text = document.body?.innerText || "";
         const hotelName = document.querySelector('#hp_hotel_name')?.innerText?.trim()
           || document.querySelector('h2[data-testid="header-title"]')?.innerText?.trim()
@@ -2671,7 +2671,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
       if (!agoda?.propertyName) { setExtractStatus('Agoda 페이지를 새로고침 후 다시 시도해주세요.', "error"); return; }
 
       await exec(tab.id, (personName) => {
-        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-8HSlpjcpIKqNtpjt2GwJlNFtBoeBOrX7ubNMBsvVDU7p2nDEuZUHAL-98jHn7cpq8A/exec";
         const agoda = window.__teraAgodaRooms;
         const text = document.body?.innerText || "";
 
@@ -2808,7 +2808,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 
     // Sheet 전송
        await exec(tab.id, (d, personName) => {
-      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
+      const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-8HSlpjcpIKqNtpjt2GwJlNFtBoeBOrX7ubNMBsvVDU7p2nDEuZUHAL-98jHn7cpq8A/exec";
       const hotelFacilityMap = [
         {keywords:["24-hour front desk","front desk [24-hour]","24 hour front desk"],code:"HAS_24_HOUR_FRONT_DESK"},
         {keywords:["wi-fi in public areas","free wi-fi","wi-fi in all rooms","wifi in public"],code:"WIFI_PUBLIC_AREA"},
