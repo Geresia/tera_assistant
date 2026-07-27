@@ -4,8 +4,8 @@
   "notes": [
     {
       "images": [],
-      "title": "Booking.com Room & Hotel Photo Scan (DOM-based)",
-      "text": "Room Scan on booking.com now collects real room/hotel photos directly from the page DOM:\n- Handles native booking.com rooms (bstatic CDN) and Partner Offer / wholesaler rooms (agoda CDN) on the same page\n- Reuses the property's own photo gallery (with per-room filter tabs) when available, instead of reopening it for every room\n- Falls back to each room's own inline photo popup when there is no filter-tab gallery\n- Upgrades thumbnail URLs to higher resolution and de-duplicates photos"
+      "title": "Booking.com Support",
+      "text": "Room Scan and Photo Insert are now available on Booking.com."
     },
     {
       "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.6.png"],
