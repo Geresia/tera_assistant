@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tera Assistant",
-  "version": "5.6",
+  "version": "6.0",
   "description": "Tera Assistant",
   "permissions": [
     "tabs",
@@ -24,6 +24,10 @@
     "https://storage.googleapis.com/*",
     "https://www.agoda.com/*",
     "https://*.agoda.net/*",
+    "https://www.booking.com/*",
+    "https://*.bstatic.com/*",
+    "https://www.airbnb.com/*",
+    "https://*.airbnb.com/*",
     "https://accounts.google.com/*"
   ],
   "content_security_policy": {
@@ -33,6 +37,18 @@
     {
       "matches": ["https://www.agoda.com/*"],
       "js": ["agoda_main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.booking.com/*"],
+      "js": ["booking_main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.airbnb.com/*", "https://*.airbnb.com/*"],
+      "js": ["airbnb_main.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }

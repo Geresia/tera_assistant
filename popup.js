@@ -821,6 +821,342 @@ async function scanAgodaTab(tabId) {
   return null;
 }
 
+// ── booking.com Room Parse ──
+function parseBookingRooms(rawRooms) {
+  const seen = new Map();
+  for (const r of (rawRooms || [])) {
+    if (!r.roomName || seen.has(r.roomName)) continue;
+    const maxAdultsMatch = (r.occupancyText || '').match(/(\d+)\s*adult/i);
+    const maxAdults = maxAdultsMatch ? parseInt(maxAdultsMatch[1]) : 2;
+    seen.set(r.roomName, {
+      roomName: r.roomName,
+      bedText: r.bedText || '',
+      sizeText: '',
+      roomPhotos: r.roomPhotos || [],
+      country: '',
+      priceText: r.priceText || '',
+      occupancy: maxAdults + ' adults',
+      maxAdults,
+      extraBedDesc: "",
+    });
+  }
+  return [...seen.values()];
+}
+
+async function scanBookingTab(tabId) {
+  for (let i = 0; i < 6; i++) {
+    const res = await exec(tabId, async () => {
+      // ─────────────────────────────────────────────────────────────
+      // booking.com 사진 URL 유틸
+      //
+      // 사진 출처가 두 가지임:
+      // 1) booking.com 자체 방 (bstatic CDN)
+      //    https://<host>.bstatic.com/xdata/images/hotel/<size>/<id>.<ext>?k=<hash>&o=...
+      //     - <size>: square60, max300, max500, 608x352, max1024x768 ... (DOM엔 대부분 썸네일 사이즈가 박혀있음)
+      //     - <ext> : jpg 또는 webp (같은 사진을 둘 다 서빙)
+      //     - k 해시는 사진 id에만 묶여있어서 size/ext를 바꿔도 그대로 통함 → 썸네일 URL을 고해상도로 승격 가능
+      // 2) 파트너(wholesaler/TPI, "Facilitated by a Booking.com partner company") 방 → Agoda 재고
+      //    https://pix8.agoda.net/hotelImages/<hotelId>/<variantId>/<hash>.<ext>?ce=..&s=840x460
+      //     - 방 이름 클릭 시에만 DOM에 삽입되는 인라인 썸네일(.b_nha_hotel_small_images)에만 존재
+      //     - 쿼리스트링(s=840x460 등)을 떼면 원본 크기를 받을 수 있음 (agoda_main.js의 parseAgodaRooms와 동일 패턴)
+      // ─────────────────────────────────────────────────────────────
+      const HIRES = 'max1024x768';
+      const BSTATIC_RE = /bstatic\.com\/xdata\/images\/hotel\//;
+      const BSTATIC_ID_RE = /\/xdata\/images\/hotel\/[^/]+\/(-?\d+)\.(?:jpg|jpeg|png|webp)/i;
+      // agoda 경로는 호텔마다 hotelImages/ 또는 property/ 등으로 다르지만 끝의 <숫자>/<숫자>/<해시>.<ext> 패턴은 공통
+      const AGODA_RE = /pix8\.agoda\.net\//;
+      const AGODA_ID_RE = /pix8\.agoda\.net\/[^/]+\/\d+\/-?\d+\/([0-9a-f]+)\.(?:jpg|jpeg|png|webp)/i;
+
+      const isHotelPhoto = (src) => typeof src === 'string' && (BSTATIC_RE.test(src) || AGODA_RE.test(src));
+      // 사진 식별 키: 도메인별로 사진 id 추출 방식이 다름 (bstatic=숫자 id, agoda=파일명 해시)
+      const photoKey = (src) => {
+        const b = (src.match(BSTATIC_ID_RE) || [])[1];
+        if (b) return 'b:' + b;
+        const a = (src.match(AGODA_ID_RE) || [])[1];
+        if (a) return 'a:' + a;
+        return src;
+      };
+      // 썸네일 URL을 고화질로 승격: bstatic은 사이즈 세그먼트를 max1024x768로, agoda는 쿼리스트링(s=)을 제거
+      const toHiRes = (src) => {
+        let u = src.trim();
+        if (u.startsWith('//')) u = 'https:' + u;
+        if (BSTATIC_RE.test(u)) {
+          return u
+            .replace(/\/xdata\/images\/hotel\/[^/]+\//, `/xdata/images/hotel/${HIRES}/`)
+            .replace(/\.webp(?=\?|$)/i, '.jpg');
+        }
+        if (AGODA_RE.test(u)) return u.replace(/\?.*/, '');
+        return u;
+      };
+      // id 기준 중복 제거 + bstatic 플레이스홀더(id가 0/음수) 제외 + 고화질 승격
+      const finalize = (srcs) => {
+        const seen = new Set();
+        const out = [];
+        for (const src of srcs) {
+          if (!isHotelPhoto(src || '')) continue;
+          if (BSTATIC_RE.test(src)) {
+            const id = (src.match(BSTATIC_ID_RE) || [])[1];
+            if (!id || id === '0' || id.startsWith('-')) continue;
+          }
+          const key = photoKey(src);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(toHiRes(src));
+        }
+        return out;
+      };
+
+      // img.src 하나만 보면 lazy-load 전 이미지를 통째로 놓치므로 srcset/data-*/배경이미지/앵커까지 전부 훑는다
+      const collectFrom = (root) => {
+        if (!root) return [];
+        const out = [];
+        const push = (u) => { if (isHotelPhoto(u)) out.push(u); };
+        const pushSrcset = (ss) => {
+          if (!ss) return;
+          ss.split(',').forEach(part => push(part.trim().split(/\s+/)[0]));
+        };
+        root.querySelectorAll('img').forEach(img => {
+          push(img.currentSrc);
+          push(img.getAttribute('src'));
+          push(img.getAttribute('data-src'));
+          push(img.getAttribute('data-lazy'));
+          push(img.getAttribute('data-highres'));
+          pushSrcset(img.getAttribute('srcset'));
+          pushSrcset(img.getAttribute('data-srcset'));
+        });
+        root.querySelectorAll('source[srcset]').forEach(s => pushSrcset(s.getAttribute('srcset')));
+        root.querySelectorAll('a[href]').forEach(a => push(a.getAttribute('href')));
+        root.querySelectorAll('[style*="url("]').forEach(el => {
+          const m = (el.getAttribute('style') || '').match(/url\((['"]?)([^'")]+)\1\)/);
+          if (m) push(m[2]);
+        });
+        return out;
+      };
+
+      const wait = (ms) => new Promise(r => setTimeout(r, ms));
+      const waitFor = async (fn, tries = 8, ms = 250) => {
+        for (let n = 0; n < tries; n++) {
+          const v = fn();
+          if (v) return v;
+          await wait(ms);
+        }
+        return null;
+      };
+      // 그리드는 가상 스크롤이라 끝까지 스크롤해야 나머지 사진의 img가 DOM에 붙는다
+      const scrollToLoad = async (el, rounds = 6) => {
+        if (!el) return;
+        const scroller = el.scrollHeight > el.clientHeight ? el : (el.closest('[style*="overflow"]') || el);
+        for (let n = 0; n < rounds; n++) {
+          scroller.scrollTop = scroller.scrollHeight;
+          await wait(300);
+        }
+        scroller.scrollTop = 0;
+        await wait(200);
+      };
+      // 파트너 방 썸네일 스트립(.hprt-ws-lightbox-gallery-thumbs)은 가로 스크롤 가상 로딩이라
+      // 끝까지 스크롤해야 뒤쪽 사진(4번째, 5번째 등)의 img가 DOM에 붙는 경우가 있음
+      const scrollToLoadHorizontal = async (el, rounds = 5) => {
+        if (!el) return;
+        const scroller = el.scrollWidth > el.clientWidth ? el : (el.querySelector('[style*="overflow"]') || el);
+        for (let n = 0; n < rounds; n++) {
+          scroller.scrollLeft = scroller.scrollWidth;
+          await wait(250);
+        }
+        scroller.scrollLeft = 0;
+        await wait(150);
+      };
+      // 이미지 개수가 더 안 늘어날 때까지(지연 로딩 안정화) 대기
+      const waitStableCount = async (fn, tries = 6, ms = 250) => {
+        let prev = -1;
+        for (let n = 0; n < tries; n++) {
+          const count = fn();
+          if (count === prev) return count;
+          prev = count;
+          await wait(ms);
+        }
+        return prev;
+      };
+
+      const closeModal = () => document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true })
+      );
+
+      // 룸 행: data-block-id가 붙은 <tr>이 실제 룸 테이블 행 (구/신 마크업 공통)
+      const rows = Array.from(document.querySelectorAll('tr[data-block-id]'));
+      if (!rows.length) return null;
+
+      const hotelName = document.querySelector('#hp_hotel_name')?.innerText?.trim()
+        || document.querySelector('h2[data-testid="header-title"]')?.innerText?.trim()
+        || document.querySelector('h1')?.innerText?.trim() || '';
+
+      // ── 1) 호텔 대표 사진 ──
+      // 문서 전체를 긁으면 하단 "비슷한 숙소" 캐러셀 사진까지 섞이므로 갤러리 컨테이너로 범위를 좁힌다.
+      const galleryRoot = document.querySelector('[data-testid="GalleryUnifiedDesktop-wrapper"]')
+        || document.querySelector('[data-testid="property-gallery"]')
+        || document.querySelector('[data-capla-component-boundary*="PropertyGallery"]')
+        || document.querySelector('#photo_wrapper')
+        || document.querySelector('.bh-photo-grid');
+      let hotelPhotos = finalize(collectFrom(galleryRoot || document));
+
+      // 갤러리 모달(GalleryGridViewModal-wrapper)은 방 이름을 눌러서가 아니라 이 헤더 트리거로 열림.
+      // 열린 채로 두면 방별 사진도 같은 모달의 필터 탭만 바꿔가며 재사용할 수 있어 여기서 닫지 않는다.
+      const getOpenModal = () => {
+        const m = document.querySelector('[data-testid="GalleryGridViewModal-wrapper"], [data-testid="gallery-modal"], .bh-photo-modal');
+        return (m && m.offsetParent !== null) ? m : null;
+      };
+      const openGalleryModal = async () => {
+        if (getOpenModal()) return getOpenModal();
+        // 갤러리 열기 트리거: 페이지 이동 위험이 없는 button / href="#" 앵커만 사용
+        const trigger = galleryRoot && (
+          galleryRoot.querySelector('button')
+          || Array.from(galleryRoot.querySelectorAll('a[href]'))
+            .find(a => (a.getAttribute('href') || '').trim().startsWith('#'))
+        );
+        if (!trigger) return null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          trigger.click();
+          const m = await waitFor(getOpenModal, 6, 250);
+          if (m) return m;
+        }
+        return null;
+      };
+
+      const mainModal = await openGalleryModal();
+      if (mainModal) {
+        const grid = mainModal.querySelector('[data-testid="gallery-modal-grid"]') || mainModal;
+        await scrollToLoad(grid);
+        const fromModal = finalize([...collectFrom(grid), ...hotelPhotos]);
+        if (fromModal.length > hotelPhotos.length) hotelPhotos = fromModal;
+      }
+      hotelPhotos = hotelPhotos.slice(0, 10);
+
+      const nameLinkSel = '.hprt-roomtype-icon-link, .rt-name-link, a[id^="room_type_id_"]';
+      // 같은 방 타입이 요금제(환불불가/무료취소 등)별로 이름이 같은 채 여러 줄 반복되는 경우가 흔해서,
+      // 이름으로 tr을 다시 찾으면 항상 "첫 번째로 이름이 일치하는 줄"만 잡혀 실제로는 다른 줄을 건드리게 됨.
+      // → 원본 행 위치(rowIndex)를 저장해뒀다가 나중에 그 인덱스로 정확히 같은 tr을 다시 찾는다.
+      const baseRooms = rows.map((tr, rowIndex) => {
+        const roomName = tr.querySelector(nameLinkSel)?.textContent?.trim() || '';
+        const roomtypeCell = tr.querySelector('.hprt-table-cell-roomtype, [class*="roomname"]');
+        const cellText = roomtypeCell?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const bedM = cellText.match(/\d+\s+(?:full|queen|king|twin|double|single|sofa|bunk)\s+beds?/i);
+        const bedText = bedM ? bedM[0] : '';
+        const priceText = tr.querySelector('.bui-price-display__value')?.textContent?.trim() || '';
+        // 룸 행 안의 썸네일(square60 등)도 고해상도로 승격되므로 모달 실패 시 대체 사진으로 쓸 수 있다
+        const rowPhotos = finalize(collectFrom(tr));
+        return { rowIndex, roomName, bedText, priceText, occupancyText: '', rowPhotos };
+      }).filter(r => r.roomName);
+
+      // ── 2) 방별 사진 ──
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      // 필터 라벨은 방 이름과 완전히 같지 않은 경우가 있어(줄바꿈/사진 장수 suffix 등) 정확일치 → 포함 순으로 매칭
+      const getFilterBtnIn = (modal, label) => {
+        const btns = Array.from(modal.querySelectorAll('button[data-testid^="room-filter-"]'))
+          .filter(b => b.getAttribute('data-testid') !== 'room-filter-0');
+        const target = norm(label);
+        if (!target) return null;
+        const labelOf = (b) => norm(b.querySelector('div:last-child')?.textContent || b.textContent);
+        return btns.find(b => labelOf(b) === target)
+          || btns.find(b => labelOf(b).startsWith(target))
+          || btns.find(b => labelOf(b).includes(target) || target.includes(labelOf(b)))
+          || null;
+      };
+
+      // 파트너(wholesaler/TPI) 방은 방 이름 클릭 시에만 agoda 이미지가 DOM에 나타남.
+      // 감싸는 컨테이너 클래스명이 호텔마다 다 달라서(.b_nha_hotel_small_images, .bui-modal__slot 등)
+      // 클래스명으로 찾지 않고 "화면에 보이는 pix8.agoda.net 이미지"를 직접 찾는다.
+      const getPartnerImgs = () => Array.from(document.querySelectorAll('img'))
+        .filter(img => img.offsetParent !== null && AGODA_RE.test(img.getAttribute('src') || img.currentSrc || ''));
+      // 파트너 방은 각 방마다 별도의 bui-modal(다이얼로그)로 뜨므로, 다음 방으로 넘어가기 전에 X(닫기)를 눌러야 함
+      // (자체 갤러리 모달(GalleryGridViewModal)은 반대로 한 번 열면 필터만 바꿔가며 재사용하므로 여기서 닫지 않음)
+      const closeNhaModal = async () => {
+        const btn = document.querySelector('button.bui-modal__close[data-bui-ref="modal-close"]')
+          || document.querySelector('.bui-modal__close');
+        if (!btn) return;
+        btn.click();
+        await waitFor(() => !document.querySelector('.bui-modal__close'), 8, 250);
+      };
+
+      // mainModal은 이미 열려있으므로(호텔 사진 수집 단계에서 열어둠) 방마다 새로 열 필요 없이 필터 탭만 바꿔가며 재사용
+      const hasRoomFilters = !!(mainModal && mainModal.querySelectorAll('button[data-testid^="room-filter-"]').length > 1);
+
+      for (const room of baseRooms) {
+        let photos = [];
+
+        // 1순위: 이미 열려있는 갤러리 모달의 방별 필터 탭 (클릭 한 번만 하면 되므로 안전하게 먼저 시도)
+        if (hasRoomFilters) {
+          const btn = getFilterBtnIn(mainModal, room.roomName);
+          // 이 방 전용 필터를 못 찾으면 전체(미필터) 갤러리를 긁게 되어 오히려 부정확 → 그럴 땐 시도하지 않음
+          if (btn) {
+            btn.click();
+            await wait(400);
+            const grid = await waitFor(() => mainModal.querySelector('[data-testid="gallery-modal-grid"]'), 8, 250);
+            if (grid) {
+              await scrollToLoad(grid, 4);
+              await waitStableCount(() => grid.querySelectorAll('img[src]').length, 4, 250);
+              photos = finalize(collectFrom(grid));
+            }
+          }
+        }
+
+        // 2순위: 파트너(wholesaler/agoda) 방 — 방 이름을 눌러야만 사진이 DOM에 나타남
+        if (!photos.length) {
+          // 이름으로 찾으면 동일 이름 행(요금제별 반복)에서 항상 첫 번째 줄만 잡히므로,
+          // 저장해둔 원본 위치로 다시 찾는다 (혹시 리렌더로 tr이 교체됐을 경우를 대비해 매번 새로 querySelectorAll)
+          const freshRows = Array.from(document.querySelectorAll('tr[data-block-id]'));
+          const tr = freshRows[room.rowIndex]
+            || freshRows.find(r => (r.querySelector(nameLinkSel)?.textContent?.trim() || '') === room.roomName);
+          const nameLink = tr?.querySelector('a.hprt-roomtype-link, a[id^="room_type_id_"]') || tr?.querySelector(nameLinkSel);
+
+          if (!getPartnerImgs().length) {
+            for (let attempt = 0; attempt < 3 && !getPartnerImgs().length; attempt++) {
+              nameLink?.click();
+              await waitFor(() => getPartnerImgs().length, 6, 250);
+            }
+          }
+          if (getPartnerImgs().length) {
+            // 가로 가상 스크롤 썸네일 스트립일 수 있으니 (찾은 이미지들의 부모 요소를) 끝까지 스크롤해보고,
+            // 이미지 개수가 더 안 늘어날 때까지 기다린 다음에 수집한다
+            const anchor = getPartnerImgs()[0];
+            const scrollHost = anchor.closest('[class*="thumb"], [class*="gallery"], [class*="modal"]') || anchor.parentElement;
+            await scrollToLoadHorizontal(scrollHost);
+            await waitStableCount(() => getPartnerImgs().length, 6, 250);
+            photos = finalize(getPartnerImgs().map(img => img.getAttribute('src') || img.currentSrc));
+            await closeNhaModal(); // 다음 방 클릭이 먹히려면 이 방 다이얼로그를 X로 닫아야 함
+          }
+        }
+
+        // 우선순위: 방 갤러리(모달 필터/인라인) → 룸 행 썸네일 → 호텔 대표 사진 1~2장 (전부 중복되는 느낌 줄임)
+        room.roomPhotos = photos.length ? photos
+          : (room.rowPhotos?.length ? room.rowPhotos : hotelPhotos.slice(0, 2));
+        delete room.rowPhotos;
+        delete room.rowIndex;
+      }
+      if (mainModal) closeModal();
+
+      return baseRooms.length ? { rooms: baseRooms, hotelPhotos, hotelName } : null;
+    }, [], "MAIN");
+    const raw = res?.[0]?.result;
+    if (raw?.rooms?.length) {
+      const rooms = parseBookingRooms(raw.rooms);
+      return { rooms, hotelPhotos: raw.hotelPhotos || [], hotelName: raw.hotelName || '' };
+    }
+    await sleep(500);
+  }
+  setStatus(currentLang === 'kr' ? 'booking.com 룸 테이블을 찾지 못했습니다. 체크인/체크아웃 날짜를 선택했는지 확인 후 다시 스캔해주세요.' : 'Could not find the booking.com room table. Make sure check-in/check-out dates are selected, then scan again.', 'error');
+  return null;
+}
+
+// ── Airbnb Room Parse (TODO: 실제 리스팅 데이터 구조 확인 후 구현) ──
+function parseAirbnbRooms(data) {
+  return [];
+}
+
+async function scanAirbnbTab(tabId) {
+  // TODO: 리스팅 DOM 스캔 또는 window.__teraAirbnbRooms 활용해 구현
+  setStatus(currentLang === 'kr' ? 'Airbnb 스캔 기능은 아직 구현되지 않았습니다.' : 'Airbnb scan is not implemented yet.', 'error');
+  return null;
+}
+
 // ── Room Scan ──
 async function scanTab(tabId) {
   await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: () => { window.__scanRoomsLoaded = false; } });
@@ -1914,15 +2250,21 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const isAgoda = tab.url?.includes("agoda.com");
     const isTrip = tab.url?.includes("trip.com/hotels");
-    if (!isTrip && !isAgoda) {
+    const isBooking = tab.url?.includes("booking.com");
+    const isAirbnb = tab.url?.includes("airbnb.com");
+    if (!isTrip && !isAgoda && !isBooking && !isAirbnb) {
       setStatus(t().notTripPage, "error");
       btn.disabled = false;
       return;
     }
 
     setStatus(t().scan1);
-    const result = isAgoda ? await scanAgodaTab(tab.id) : await scanTab(tab.id);
+    const result = isAgoda ? await scanAgodaTab(tab.id)
+      : isBooking ? await scanBookingTab(tab.id)
+      : isAirbnb ? await scanAirbnbTab(tab.id)
+      : await scanTab(tab.id);
     if (!result) { btn.disabled = false; return; }
+    if (result.hotelName) document.getElementById("hotelName").value = result.hotelName;
     const allRooms = new Map();
     (result.rooms || []).forEach(r => { if (!allRooms.has(r.roomName)) allRooms.set(r.roomName, r); });
 
@@ -2179,7 +2521,149 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const isAgodaExtract = tab.url?.includes("agoda.com");
     const isTripExtract  = tab.url?.includes("trip.com");
-    if (!isTripExtract && !isAgodaExtract) { setExtractStatus(t().extractNotTrip, "error"); return; }
+    const isBookingExtract = tab.url?.includes("booking.com");
+    const isAirbnbExtract = tab.url?.includes("airbnb.com");
+    if (!isTripExtract && !isAgodaExtract && !isBookingExtract && !isAirbnbExtract) { setExtractStatus(t().extractNotTrip, "error"); return; }
+
+    if (isBookingExtract) {
+      const bookingRes = await exec(tab.id, (personName) => {
+        const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfLhsdl4CCaCCorVSLbXehk-5CjD_mM1uwounoSEMqP1FOcOCPn1ULXcL6wuJegTtxfA/exec";
+        const text = document.body?.innerText || "";
+        const hotelName = document.querySelector('#hp_hotel_name')?.innerText?.trim()
+          || document.querySelector('h2[data-testid="header-title"]')?.innerText?.trim()
+          || document.querySelector('h1')?.innerText?.trim() || '';
+
+        // Check-in/out from page text (booking.com은 12시간제 AM/PM 표기가 많아 24시간제로 변환)
+        const to24h = (hhmm, ampm) => {
+          if (!ampm) return hhmm;
+          let [h, mi] = hhmm.split(':').map(Number);
+          const isPM = /pm/i.test(ampm);
+          if (isPM && h !== 12) h += 12;
+          if (!isPM && h === 12) h = 0;
+          return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+        };
+        let checkIn = '14:00', checkOut = '12:00';
+        let m = text.match(/check.?in[:\s]*(?:from\s*)?(\d{1,2}:\d{2})\s*(am|pm)?/i);
+        if (m) checkIn = to24h(m[1], m[2]);
+        m = text.match(/check.?out[:\s]*(?:until\s*|before\s*)?(\d{1,2}:\d{2})\s*(am|pm)?/i);
+        if (m) checkOut = to24h(m[1], m[2]);
+
+        // JSON-LD (Schema.org) - address, GPS, star rating
+        let address = '', lat = '', lng = '', starRating = '0';
+        for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+          try {
+            const json = JSON.parse(s.textContent);
+            const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+            const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+            if (hotel) {
+              if (hotel.geo?.latitude) { lat = parseFloat(hotel.geo.latitude).toFixed(4); lng = parseFloat(hotel.geo.longitude).toFixed(4); }
+              if (hotel.address) {
+                const a = hotel.address;
+                if (typeof a === 'string') {
+                  address = a;
+                } else {
+                  const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+                  address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+                }
+              }
+              if (hotel.starRating?.ratingValue) starRating = String(Math.floor(hotel.starRating.ratingValue));
+              break;
+            }
+          } catch(e) {}
+        }
+        if (!address) {
+          const addrEl = document.querySelector('[data-testid="address"], .hp_address_subtitle');
+          address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+        }
+
+        // booking.com JSON-LD엔 geo/starRating이 없어 별도 소스에서 보강
+        if (!lat) {
+          for (const s of document.querySelectorAll('script:not([src])')) {
+            const c = s.textContent;
+            const latM = c.match(/b_map_center_latitude\s*=\s*([\d.-]+)/);
+            const lngM = c.match(/b_map_center_longitude\s*=\s*([\d.-]+)/);
+            if (latM && lngM) { lat = parseFloat(latM[1]).toFixed(4); lng = parseFloat(lngM[1]).toFixed(4); break; }
+          }
+        }
+        if (starRating === '0') {
+          const starEl = document.querySelector('[data-testid="quality-rating"], [data-testid="rating-stars"]');
+          const starM = starEl?.getAttribute('aria-label')?.match(/(\d+(?:\.\d+)?)\s*out of\s*5\s*stars?/i);
+          if (starM) starRating = String(Math.floor(parseFloat(starM[1])));
+        }
+
+        // Currency: booking.com의 가격 표시(.bui-price-display__value)는 세션/계정 통화 설정을 따라가서
+        // (예: 마카오 호텔인데 로그인 통화가 KRW면 "KRW ..."로 표시됨) 호텔 실제 소재국 기준으로 우선 판정
+        const a = address.toLowerCase();
+        const currencyMap = [["japan","JPY"],["hong kong","HKD"],["thailand","THB"],["indonesia","IDR"],["singapore","SGD"],["malaysia","MYR"],["vietnam","VND"],["philippines","PHP"],["taiwan","TWD"],["china","CNY"],["australia","AUD"],["india","INR"],["united arab emirates|uae","AED"],["saudi","SAR"],["new zealand","NZD"],["fiji","FJD"],["macau|macao","MOP"]];
+        let currency = '';
+        for (const [re, cur] of currencyMap) { if (new RegExp(re).test(a)) { currency = cur; break; } }
+        if (!currency) {
+          const priceCodeM = document.querySelector('.bui-price-display__value')?.textContent?.trim().match(/^([A-Z]{3})\b/);
+          if (priceCodeM) {
+            currency = priceCodeM[1];
+          } else {
+            const symbolMap = [['NT$','TWD'],['HK$','HKD'],['S$','SGD'],['RM','MYR'],['Rp','IDR'],['₱','PHP'],['₫','VND'],['฿','THB'],['¥','JPY'],['₩','KRW']];
+            currency = 'KRW';
+            for (const [sym, cur] of symbolMap) { if (text.includes(sym)) { currency = cur; break; } }
+          }
+        }
+
+        // Accommodation type
+        const n = hotelName.toLowerCase();
+        let accommodationType = 'HOTEL';
+        if (/resort/.test(n)) accommodationType = 'RESORT';
+        else if (/hostel|backpacker/.test(n)) accommodationType = 'HOSTEL_BACKPACKER_ACCOMMODATION';
+        else if (/villa/.test(n)) accommodationType = 'VILLA';
+        else if (/apartment|apart/.test(n)) accommodationType = 'APARTMENT';
+        else if (/capsule/.test(n)) accommodationType = 'CAPSULE_HOTEL';
+        else if (/guesthouse|guest house/.test(n)) accommodationType = 'GUESTHOUSE';
+
+        // Hotel Bulk Insert - hotel-level facility codes only
+        const fmap = [
+          {keywords:['24-hour front desk','front desk [24-hour]','24 hour front desk'],code:'HAS_24_HOUR_FRONT_DESK'},
+          {keywords:['wi-fi in public','wi-fi in all rooms','free wi-fi','wi-fi [free]','wifi in public'],code:'WIFI_PUBLIC_AREA'},
+          {keywords:['car park','parking'],code:'CARPARK'},
+          {keywords:['room service'],code:'ROOM_SERVICE'},
+          {keywords:['laundry service','laundromat'],code:'LAUNDRY_SERVICE'},
+          {keywords:['air conditioning'],code:'AIR_CONDITIONING'},
+          {keywords:['restaurant'],code:'RESTAURANT'},
+          {keywords:['shower'],code:'SHOWER'},
+          {keywords:['television','cable tv','lcd tv'],code:'TELEVISION'},
+          {keywords:['safety deposit'],code:'SAFETY_DEPOSIT_BOX'},
+          {keywords:['atm','banking','cash machine'],code:'ATM_OR_BANKING'},
+          {keywords:['non-smoking rooms','non-smoking','smoke-free'],code:'NON_SMOKING_ROOM'},
+          {keywords:['luggage storage'],code:'LUGGAGE_STORAGE'},
+          {keywords:['outdoor pool','swimming pool'],code:'OUTDOOR_POOL'},
+          {keywords:['smoking area'],code:'SMOKING_AREA'},
+          {keywords:['desk'],code:'DESK'},
+          {keywords:['car hire','car rental'],code:'CAR_HIRE'},
+          {keywords:['cable tv','cable television'],code:'CABLE_TV'},
+          {keywords:['shop'],code:'SHOPS'},
+          {keywords:['meeting','banquet','seminar','conference'],code:'MEETING_FACILITIES'},
+        ];
+        const ft = text.toLowerCase();
+        const hotelFacilities = fmap.filter(f => f.keywords.some(k => ft.includes(k))).map(f => f.code).join(', ');
+
+        fetch(HOTEL_WEB_APP_URL, {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ type: 'hotel', hotelName, address, latitude: lat, longitude: lng, starRating, checkIn, checkOut, currency, accommodationType, hotelFacilities, personName })
+        });
+        return hotelName;
+      }, [selectedPerson || 'Others'], 'MAIN');
+
+      const bookingHotelName = bookingRes?.[0]?.result;
+      if (!bookingHotelName) { setExtractStatus('booking.com 페이지를 새로고침 후 다시 시도해주세요.', "error"); return; }
+
+      setExtractStatus(t().extractDone(bookingHotelName), "success");
+      await openOrFocusTab("https://docs.google.com/spreadsheets/d/1ETcFuTHjFJpxZL9KwTcxMrJd1E_X5iWXdbe4LzBQxmA/*", HOTEL_SHEET_URL);
+      return;
+    }
+
+    if (isAirbnbExtract) {
+      // TODO: Airbnb Hotel Bulk Insert 구현
+      setExtractStatus(currentLang === 'kr' ? 'Airbnb Hotel Bulk Insert는 아직 구현되지 않았습니다.' : 'Airbnb Hotel Bulk Insert is not implemented yet.', "error");
+      return;
+    }
 
     if (isAgodaExtract) {
       const agodaRes = await exec(tab.id, () => window.__teraAgodaRooms, [], "MAIN");
@@ -2584,6 +3068,135 @@ const agodaExtractForDetail = async () => {
   return data;
 };
 
+// ── booking.com Hotel Detail Extract (runs in page MAIN world) ──
+const bookingExtractForDetail = async () => {
+  const text = document.body?.innerText || '';
+  const data = {};
+
+  data.name_en = document.querySelector('#hp_hotel_name')?.innerText?.trim()
+    || document.querySelector('h2[data-testid="header-title"]')?.innerText?.trim()
+    || document.querySelector('h1')?.innerText?.trim() || '';
+  data.name_local = '';
+
+  // JSON-LD (Schema.org) → address, postal_code, country, star rating
+  let address = '', postalCode = '', countryCode = '';
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const json = JSON.parse(s.textContent);
+      const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+      const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+      if (hotel) {
+        if (hotel.address) {
+          const a = hotel.address;
+          if (typeof a === 'string') {
+            address = a;
+          } else {
+            const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+            address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+            postalCode = a.postalCode || '';
+            const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
+            countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
+          }
+        }
+        break;
+      }
+    } catch(e) {}
+  }
+  if (!address) {
+    const addrEl = document.querySelector('[data-testid="address"], .hp_address_subtitle');
+    address = (addrEl?.innerText?.trim() || '').replace(/\n/g, ', ');
+  }
+  data.address = address;
+  data.postal_code = postalCode;
+
+  // booking.com은 "Check-in / From 2:00 PM"처럼 12시간제(AM/PM)를 쓰는 경우가 많아 24시간제로 변환
+  const to24h = (hhmm, ampm) => {
+    if (!ampm) return hhmm;
+    let [h, mi] = hhmm.split(':').map(Number);
+    const isPM = /pm/i.test(ampm);
+    if (isPM && h !== 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+  };
+
+  // Check-in / Check-out (페이지 텍스트 정규식)
+  let checkIn = '', checkOut = '', checkinEnd = '', checkoutStart = '';
+  let m = text.match(/check.?in[:\s]*(?:from\s*)?(\d{1,2}:\d{2})\s*(am|pm)?/i);
+  if (m) checkIn = to24h(m[1], m[2]);
+  m = text.match(/check.?out[:\s]*(?:until\s*|before\s*)?(\d{1,2}:\d{2})\s*(am|pm)?/i);
+  if (m) checkOut = to24h(m[1], m[2]);
+  m = text.match(/check.?in[^\n]{0,20}?[–-]\s*(\d{1,2}:\d{2})\s*(am|pm)?/i);
+  if (m) checkinEnd = to24h(m[1], m[2]);
+
+  const is24hr = /24.hour front desk/i.test(text);
+  data.front_desk_hours = is24hr ? 'Yes' : 'No';
+  data.checkin_time = checkIn || '14:00';
+  data.checkout_time = checkOut || '12:00';
+  data.checkin_end = is24hr ? '23:59' : (checkinEnd || '23:59');
+  data.checkout_start = is24hr ? '00:00' : (checkoutStart || '00:00');
+
+  // Property details (건축년도, 객실/층/레스토랑/바 수) - 페이지 텍스트 정규식
+  const builtM = text.match(/(?:opened|established|built)\s*(?:in\s*)?:?\s*(\d{4})/i);
+  data.built_year = builtM?.[1] || '';
+  const renM = text.match(/[Rr]enovated?\s*(?:in\s*)?:?\s*(\d{4})/);
+  data.renovated_year = renM?.[1] || data.built_year || '';
+  // "Number of ~:" 같은 명시적 문구가 있을 때만 채움 (검색 위젯의 "1 room" 같은 오탐 방지)
+  data.room_count = text.match(/Number of (?:guest )?rooms?\s*[:\s]+(\d+)/i)?.[1] || '';
+  data.floor_count = text.match(/Number of floors?\s*[:\s]+(\d+)/i)?.[1] || '';
+  data.restaurant_count = text.match(/Number of restaurants?\s*[:\s]+(\d+)/i)?.[1] || '-';
+  data.bar_count = text.match(/Number of bars?\s*[:\s]+(\d+)/i)?.[1] || '-';
+
+  const voltageRaw = text.match(/Voltage\s*[:\s]+(\d+)/i)?.[1];
+  if (voltageRaw) {
+    data.voltage = voltageRaw + 'V';
+  } else {
+    const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
+    data.voltage = voltMap[countryCode] || '';
+  }
+
+  // Breakfast price
+  const brkM = text.match(/Breakfast charge[^\n]*:\s*([\d,]+)\s*(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)/i)
+    || text.match(/(?:breakfast|buffet)[^\n]*₩\s*([\d,]+)/i)
+    || text.match(/(?:breakfast|buffet)[^\n]*(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)/i);
+  if (brkM) data.breakfast_price = brkM[1].replace(/,/g, '');
+
+  // Room service, parking, airport transfer
+  data.room_service = /room\s*service/i.test(text) ? 'Yes' : 'No';
+  if (/free\s*(?:on.?site\s*)?parking|parking\s*\(free\)/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else if (/paid\s*parking|parking\s*(?:charge|fee)|parking\s*\(chargeable\)/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Paid';
+  } else if (/\bparking\b/i.test(text)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else {
+    data.parking = 'No'; data.parking_type = '-';
+  }
+  data.parking_price = '-';
+  data.airport_transfer = /airport\s*(?:pickup|shuttle|transfer)/i.test(text) ? 'Yes' : 'No';
+  if (data.airport_transfer === 'Yes') {
+    if (/free[^.]*airport\s*(?:pickup|shuttle|transfer)|airport\s*(?:pickup|shuttle|transfer)[^.]*free/i.test(text)) {
+      data.airport_transfer_fee = 'Free';
+    } else {
+      const atFeeM = text.match(/airport\s*(?:pickup|shuttle|transfer)[^.]*?(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)/i)
+        || text.match(/(?:KRW|USD|JPY|CNY|HKD|THB|IDR|SGD|MYR|PHP|VND|TWD)\s*([\d,]+)[^.]*airport\s*(?:pickup|shuttle|transfer)/i);
+      data.airport_transfer_fee = atFeeM ? atFeeM[1].replace(/,/g, '') : '-';
+    }
+  } else {
+    data.airport_transfer_fee = '-';
+  }
+
+  // Facilities: 전체 페이지 텍스트로 키워드 매칭
+  data._tripFacilities = [{ desc: text }];
+
+  return data;
+};
+
+// ── Airbnb Hotel Detail Extract (TODO: 실제 페이지 구조 확인 후 구현, runs in page MAIN world) ──
+const airbnbExtractForDetail = async () => {
+  // TODO: 리스팅 정보, 체크인/아웃, 편의시설 등 실제 추출 로직 구현
+  return null;
+};
+
 // Hotel Detail Insert (Tera Autofill)
 document.getElementById("sheetBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -2642,6 +3255,38 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
     } finally {
       btn.disabled = false;
     }
+    return;
+  }
+
+  // 지금 탭이 booking.com이면: 추출 → currentHotelData 갱신 → Tera 탭으로 이동
+  if (tab.url?.includes("booking.com")) {
+    btn.disabled = true;
+    setExtractStatus(t().extracting);
+    try {
+      const results = await exec(tab.id, bookingExtractForDetail, [], "MAIN");
+      const data = results?.[0]?.result;
+      if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
+      currentHotelData = data;
+      renderHotelPreview(data);
+      setExtractStatus(t().extractDone(data.name_en), "success");
+      await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
+      setExtractStatus(
+        currentLang === 'kr'
+          ? `${data.name_en} - 버튼을 한 번 더 눌러서 시작해 주세요.`
+          : `${data.name_en} - Click one more time to begin.`,
+        "success"
+      );
+    } catch (e) {
+      setExtractStatus("Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  // 지금 탭이 Airbnb이면: TODO - 실제 추출 로직 구현 전까지는 미구현 안내만 표시
+  if (tab.url?.includes("airbnb.com")) {
+    setExtractStatus(currentLang === 'kr' ? 'Airbnb Hotel Detail Insert는 아직 구현되지 않았습니다.' : 'Airbnb Hotel Detail Insert is not implemented yet.', "error");
     return;
   }
 
