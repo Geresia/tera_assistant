@@ -6,16 +6,6 @@
       "images": [],
       "title": "Booking.com Support",
       "text": "Room Scan and Photo Insert are now available on Booking.com."
-    },
-    {
-      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.6.png"],
-      "title": "Multiple Bedrooms Autofill Edit Option",
-      "text": "Now you can edit the room option before adding to tera\n- Clicks Multiple Bedrooms radio first before filling each bedroom\n- Detects and removes extra empty bedroom sections automatically"
-    },
-    {
-      "images": ["https://raw.githubusercontent.com/Geresia/tera_assistant/main/notes_5.6b.png"],
-      "title": "New Members Added",
-      "text": "Keti and Scott have been added to the Assigned To list."
     }
   ]
 }
