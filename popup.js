@@ -493,9 +493,11 @@ const HOTEL_FACILITY_MAP = [
   { keywords: ["babysitting", "childcare", "child care"], teraValues: ["BABYSITTING", "SUPERVISED_CHILDCARE"] },
   { keywords: ["children's play area", "children play area", "kids play area", "playground"], teraValues: ["CHILDREN_PLAY_AREA"] },
   { keywords: ["kids club", "children's club", "children club"], teraValues: ["CHILDREN_CLUB"] },
-  { keywords: ["wheelchair", "accessible facilities", "disability access"], teraValues: ["WHEELCHAIR_ACCESSIBLE"] },
+  { keywords: ["wheelchair", "accessible facilities", "disability access", "disabled guests", "facilities for disabled"], teraValues: ["WHEELCHAIR_ACCESSIBLE"] },
+  { keywords: ["toilet with grab rails", "grab rails"], teraValues: ["ACCESSIBLE_BATHROOM"] },
+  { keywords: ["visual aids", "braille", "tactile signs"], teraValues: ["ACCESSIBILITY_EQUIPMENT"] },
   { keywords: ["24-hour security", "security guard", "security service"], teraValues: ["HAS_24_HOUR_SECURITY"] },
-  { keywords: ["multilingual staff", "multiple languages"], teraValues: ["MULTILINGUAL_STAFF"] },
+  { keywords: ["multilingual staff", "multiple languages", "languages spoken"], teraValues: ["MULTILINGUAL_STAFF"] },
   { keywords: ["rooftop pool", "infinity pool", "outdoor pool", "outdoor swimming", "saltwater pool", "pool with view"], teraValues: ["OUTDOOR_POOL", "POOL"] },
   { keywords: ["indoor pool", "indoor swimming"], teraValues: ["INDOOR_POOL", "POOL"] },
   { keywords: ["heated pool"], teraValues: ["OUTDOOR_HEATED_POOL", "POOL"] },
@@ -517,6 +519,9 @@ const HOTEL_FACILITY_MAP = [
   { keywords: ["ski"], teraValues: ["SKI"] },
   { keywords: ["marina"], teraValues: ["MARINA"] },
   { keywords: ["turkish bath", "hammam"], teraValues: ["TURKISH_BATH"] },
+  // ── booking.com 전용 문구 (Agoda/Trip.com과 표기가 달라 추가) ──
+  { keywords: ["air conditioning", "air-conditioning"], teraValues: ["AIR_CONDITIONING"] },
+  { keywords: ["photocopying", "fax"], teraValues: ["PHOTOCOPIER"] },
 ];
 const FACILITY_CODE_MAP = new Map();
 for (const mapping of HOTEL_FACILITY_MAP) {
