@@ -347,12 +347,15 @@ const COUNTRY_DEFAULTS = {
   HK: { size: '10', rateProtection: '500' },
   MY: { size: '10', rateProtection: '100' },
   PH: { size: '10', rateProtection: '250' },
+  AU: { size: '10', rateProtection: '100' },
 };
+// 위 목록에 없는 국가는 KR 값을 그대로 재사용하면 통화 단위가 안 맞을 수 있어(예: 호주가 10000원 값을 그대로 받음) 별도 기본값으로 분리
+const FALLBACK_COUNTRY_DEFAULTS = { size: '10', rateProtection: '1000' };
 const DEFAULT_FACILITIES    = "AIR_CONDITIONING, HAIR_DRYER, COFFEE_TEA_MAKER, COMPLIMENTARY_BOTTLED_WATER, SHOWER";
 const DEFAULT_FACILITIES_KR = "AIR_CONDITIONING, HAIR_DRYER, DESK, INTERNET_ACCESS_WIFI_COMPLIMENTARY, COMPLIMENTARY_BOTTLED_WATER, COFFEE_TEA_MAKER, REFRIGERATOR, HEATED_WATER";
 
 function getCountryDefaults(country) {
-  return COUNTRY_DEFAULTS[country] || COUNTRY_DEFAULTS.KR;
+  return COUNTRY_DEFAULTS[country] || FALLBACK_COUNTRY_DEFAULTS;
 }
 
 const COUNTRY_LOCALE_MAP = {
