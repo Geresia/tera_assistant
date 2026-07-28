@@ -365,6 +365,17 @@ const COUNTRY_LOCALE_MAP = {
   philippines: "en-PH", malaysia: "ms-MY", singapore: "en-SG",
 };
 
+// booking.com/Agoda의 JSON-LD addressCountry가 코드가 아니라 나라/지역 이름 그대로 오는 경우가 있어
+// (예: "Macau") voltMap(2자리 코드 기준) 조회 전에 정규화
+const COUNTRY_NAME_TO_VOLT_CODE = {
+  "south korea": "kr", korea: "kr",
+  japan: "jp", china: "cn",
+  "hong kong": "hk", macau: "cn", macao: "cn",
+  indonesia: "id", vietnam: "vn", thailand: "th",
+  philippines: "ph", malaysia: "my", singapore: "sg",
+  taiwan: "tw",
+};
+
 // ── Hotel Facility Map ──
 const HOTEL_FACILITY_MAP = [
   { codes: [102], teraValues: ["WIFI_PUBLIC_AREA", "WIFI_FREE"] },
@@ -2981,6 +2992,7 @@ const agodaExtractForDetail = async () => {
             postalCode = a.postalCode || '';
             const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
             countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
+            countryCode = COUNTRY_NAME_TO_VOLT_CODE[countryCode] || countryCode;
           }
         }
         break;
@@ -3099,6 +3111,7 @@ const bookingExtractForDetail = async () => {
             postalCode = a.postalCode || '';
             const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
             countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
+            countryCode = COUNTRY_NAME_TO_VOLT_CODE[countryCode] || countryCode;
           }
         }
         break;
