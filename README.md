@@ -1,6 +1,6 @@
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-5.6-0EA5E9?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-6.0-0EA5E9?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)
@@ -11,7 +11,7 @@
 
 **Chrome Extension for Traveloka TERA hotel data automation**
 
-Extracts hotel and room data from Trip.com and Agoda, and automatically fills it into [tera.traveloka.com](https://tera.traveloka.com) - including photos, facilities, bed types, and more.
+Extracts hotel and room data from Trip.com, Agoda, Booking.com, and Airbnb, and automatically fills it into [tera.traveloka.com](https://tera.traveloka.com) - including photos, facilities, bed types, and more.
 
 </div>
 
@@ -22,13 +22,13 @@ Extracts hotel and room data from Trip.com and Agoda, and automatically fills it
 ### Hotel Info
 | Feature | Source | What it fills |
 |---|---|---|
-| **Hotel Bulk Insert** | Trip.com / Agoda | Details, Overview, Address tabs |
-| **Hotel Detail Insert** | Trip.com / Agoda | Check-in/out, room count, floors, facilities, breakfast, airport transfer, built year, local name & address |
+| **Hotel Bulk Insert** | Trip.com / Agoda / Booking.com | Details, Overview, Address tabs |
+| **Hotel Detail Insert** | Trip.com / Agoda / Booking.com / Airbnb | Check-in/out, room count, floors, facilities, breakfast, airport transfer, voltage, built year, local name & address |
 
 ### Room Management
 | Feature | Description |
 |---|---|
-| **Scan** | Scrapes all room types from Trip.com or Agoda |
+| **Scan** | Scrapes all room types from Trip.com, Agoda, or Booking.com. On Airbnb, the whole listing is scanned as a single room |
 | **Fill** | Auto-fills each room into Tera one by one (bed type, size, view, facilities, description) |
 | **IMAGE** | Downloads all room + hotel photos as a ZIP, auto-cropped and resized to TERA specs |
 | **Hotel Photos Insert** | Uploads hotel photos directly to Tera's hotel-photo page |
@@ -58,6 +58,8 @@ Falls back to a manual prompt if any step fails.
 |---|---|
 | **Trip.com** | `physicRoomMap` + `getHotelDetailAggregate` API interception |
 | **Agoda** | `room-grid`, `graphql/property`, `BelowFoldParams` API interception via `window.fetch` override at `document_start` |
+| **Booking.com** | DOM scraping - room table rows, gallery modal / partner (wholesaler) photo galleries, JSON-LD, `hreflang=ko` fetch for Korean name/address |
+| **Airbnb** | JSON-LD + the `data-deferred-state-0` GraphQL payload embedded in the page (amenities, house rules, check-in/out, photos) |
 
 ---
 
@@ -93,10 +95,11 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ### Hotel Info
 
-1. Open the extension Side Panel on a Trip.com or Agoda hotel page
-2. Click **Hotel Detail Insert** (or **Hotel Bulk Insert** for Trip.com)
+1. Open the extension Side Panel on a Trip.com, Agoda, Booking.com, or Airbnb hotel page
+2. Click **Hotel Detail Insert** (or **Hotel Bulk Insert** for Trip.com / Agoda / Booking.com)
 
 > **Agoda:** Wait for the page to fully load before clicking. Korean name/address only available in Korean locale.
+> **Airbnb:** Hotel Detail Insert only - there's no Hotel Bulk Insert / Sheet flow for Airbnb yet.
 
 ### Create New Room
 
@@ -122,6 +125,8 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 | `popup.html` / `popup.js` | Side Panel UI and all automation logic |
 | `content.js` | Trip.com room & hotel photo scraper |
 | `agoda_main.js` | Agoda API interceptor (injected at `document_start`, `world: MAIN`) |
+| `booking_main.js` | Booking.com fetch/XHR debug logger (injected at `document_start`, `world: MAIN`) |
+| `airbnb_main.js` | Airbnb page patch (injected at `document_start`, `world: MAIN`) |
 | `background.js` | Side Panel launcher + auto login trigger |
 | `tera_login.js` | Auto login script for `tera.traveloka.com/login/` |
 | `google_account.js` | Google account chooser automation |
@@ -134,6 +139,7 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ## Version History
 
+- **6.0** - Booking.com support: room/hotel photo scan (native gallery + partner/wholesaler galleries), Hotel Bulk & Detail Insert, Korean name/address via `hreflang=ko`, address dedup, airport transfer FAQ-widget false positive fix. Airbnb support: Hotel Detail Insert and single-room/photo scan via the page's `data-deferred-state-0` GraphQL payload. Room voltage closure bug fix. Australia rate protection default fixed (separated fallback default from Korea-specific defaults). Expanded facility keyword matching.
 - **5.6** - Multiple Bedrooms autofill support. Detects and removes extra empty bedroom sections. All key waits converted to polling (Create New Room nav, Submit/Save, photo upload preview).
 - **5.51** - Details save reliability fix (re-click after React state settles). Google account auto-selection removed (scope too broad). Traveloka bird favicon for extension icon.
 - **5.5** - Auto Crop/Fit detection for photo processing (>15% crop threshold → Fit mode). Auto-login on Tera `/login/` redirect with Google Workspace SSO + account chooser automation. Traveloka icon.
