@@ -133,9 +133,23 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ## Version History
 
-- **6.2** - "Assigned To" now accepts any typed name, not just the preset list - the Google Sheet tab is created automatically on first use. Ad-hoc names typed this way are cleaned up nightly at midnight KST so they don't pile up; preset teammates' sheets are untouched.
-- **6.1** - README refresh (Booking.com/Airbnb docs, install now via Tera Image Tool site).
-- **6.0** - Booking.com support: room/hotel photo scan (native gallery + partner/wholesaler galleries), Hotel Bulk & Detail Insert, Korean name/address via `hreflang=ko`, address dedup, airport transfer FAQ-widget false positive fix. Airbnb support: Hotel Detail Insert and single-room/photo scan via the page's `data-deferred-state-0` GraphQL payload. Room voltage closure bug fix. Australia rate protection default fixed (separated fallback default from Korea-specific defaults). Expanded facility keyword matching.
+#### 6.2
+- "Assigned To" now accepts any typed name, not just the preset list - the Google Sheet tab is created automatically on first use
+- Ad-hoc names typed this way are cleaned up nightly at midnight KST so they don't pile up; preset teammates' sheets are untouched
+
+#### 6.1
+- README refresh (Booking.com/Airbnb docs, install now via Tera Image Tool site)
+
+#### 6.0
+- **Booking.com support** - room/hotel photo scan (native gallery + partner/wholesaler galleries), Hotel Bulk & Detail Insert, Korean name/address via `hreflang=ko`, address dedup, airport transfer FAQ-widget false positive fix
+- **Airbnb support** - Hotel Detail Insert and single-room/photo scan via the page's `data-deferred-state-0` GraphQL payload
+- Room voltage closure bug fix
+- Australia rate protection default fixed (separated fallback default from Korea-specific defaults)
+- Expanded facility keyword matching
+
+<details>
+<summary><strong>5.6 and earlier</strong></summary>
+
 - **5.6** - Multiple Bedrooms autofill support. Detects and removes extra empty bedroom sections. All key waits converted to polling (Create New Room nav, Submit/Save, photo upload preview).
 - **5.51** - Details save reliability fix (re-click after React state settles). Google account auto-selection removed (scope too broad). Traveloka bird favicon for extension icon.
 - **5.5** - Auto Crop/Fit detection for photo processing (>15% crop threshold → Fit mode). Auto-login on Tera `/login/` redirect with Google Workspace SSO + account chooser automation. Traveloka icon.
@@ -146,3 +160,5 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 - **3.0** - ZIP photo download. Language toggle. Auto-expand hidden room types.
 - **2.0** - Migrated from bookmarklet to Chrome Extension.
 - **1.0** - Initial release as a browser bookmarklet.
+
+</details>
