@@ -11,8 +11,6 @@
 
 **Chrome Extension for Traveloka TERA hotel data automation**
 
-Extracts hotel and room data from Trip.com, Agoda, Booking.com, and Airbnb, and automatically fills it into [tera.traveloka.com](https://tera.traveloka.com) - including photos, facilities, bed types, and more.
-
 </div>
 
 ---
@@ -67,11 +65,7 @@ Falls back to a manual prompt if any step fails.
 
 **Step 1 - Download**
 
-Open PowerShell and run:
-
-```powershell
-$d="$env:USERPROFILE\Desktop\tera_assistant"; mkdir $d -Force; iwr "https://raw.githubusercontent.com/Geresia/tera_assistant/main/update.ps1" -OutFile "$d\update.ps1"; iwr "https://raw.githubusercontent.com/Geresia/tera_assistant/main/Tera_Update.bat" -OutFile "$d\Tera_Update.bat"; powershell -ExecutionPolicy Bypass -File "$d\update.ps1"
-```
+Go to [Tera Image Tool](https://geresia.github.io/TVLK_TERA_IMG_CONVERTER/) and click **Get Tera Assistant** to download it, then unzip to `Desktop\tera_assistant`.
 
 **Step 2 - Load in Chrome**
 
