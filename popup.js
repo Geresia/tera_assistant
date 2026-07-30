@@ -540,11 +540,52 @@ function getTeraFacilities(tripFacilities) {
 const t = () => STRINGS[currentLang];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// ── Daily Fortune (그냥 재미로) ──
+const DAILY_FORTUNES = {
+  kr: [
+    "오늘은 오탐 없이 한번에 통과하는 날.",
+    "커밋 전에 한 번 더 저장하면 좋은 일이 생겨요.",
+    "오늘 스캔한 방은 사진이 다 잘 들어올 예정.",
+    "Apps Script 배포 깜빡하지 않으면 만사형통.",
+    "새로운 이름 하나가 조용히 등록되는 날.",
+    "리로드 한 번이면 웬만한 문제는 풀립니다.",
+    "오늘의 행운 사이트: booking.com.",
+    "푸시하기 전에 git status 한 번 더 보면 대길.",
+    "사진 39장 정도는 가볍게 스캔되는 하루.",
+    "버전을 하나 더 올리고 싶어지는 날.",
+  ],
+  en: [
+    "No false positives today - smooth scans all around.",
+    "Save once more before committing, good things follow.",
+    "Every room photo you scan today loads on the first try.",
+    "Remember to deploy the Apps Script and all is well.",
+    "A new name quietly gets added to the sheet today.",
+    "One reload fixes most of what ails you.",
+    "Today's lucky site: booking.com.",
+    "Check git status once more before you push - great luck.",
+    "About 39 photos scan effortlessly today.",
+    "You'll feel like bumping the version once more.",
+  ],
+};
+
+function renderDailyFortune(lang) {
+  const el = document.getElementById('dailyFortune');
+  if (!el) return;
+  const list = DAILY_FORTUNES[lang] || DAILY_FORTUNES.kr;
+  const today = new Date();
+  const dateKey = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+  let hash = 0;
+  for (let i = 0; i < dateKey.length; i++) hash = (hash * 31 + dateKey.charCodeAt(i)) >>> 0;
+  const fortune = list[hash % list.length];
+  el.textContent = (lang === 'kr' ? '🔮 오늘의 운세: ' : "🔮 Today's fortune: ") + fortune;
+}
+
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem('teraLang', lang);
   document.getElementById('btnKR').className = 'lang-btn' + (lang === 'kr' ? ' active' : '');
   document.getElementById('btnEN').className = 'lang-btn' + (lang === 'en' ? ' active' : '');
+  renderDailyFortune(lang);
   document.getElementById('startBtn').textContent = STRINGS[lang].startBtn;
   document.getElementById('hotelName').placeholder = STRINGS[lang].hotelNamePlaceholder;
   document.getElementById('status').textContent = STRINGS[lang].defaultStatus;
