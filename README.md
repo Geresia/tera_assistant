@@ -1,6 +1,6 @@
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-6.0-0EA5E9?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-6.1-0EA5E9?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)
@@ -133,6 +133,7 @@ Double-click `Tera_Update.bat` in the `tera_assistant` folder, then reload at `c
 
 ## Version History
 
+- **6.1** - README refresh (Booking.com/Airbnb docs, install now via Tera Image Tool site).
 - **6.0** - Booking.com support: room/hotel photo scan (native gallery + partner/wholesaler galleries), Hotel Bulk & Detail Insert, Korean name/address via `hreflang=ko`, address dedup, airport transfer FAQ-widget false positive fix. Airbnb support: Hotel Detail Insert and single-room/photo scan via the page's `data-deferred-state-0` GraphQL payload. Room voltage closure bug fix. Australia rate protection default fixed (separated fallback default from Korea-specific defaults). Expanded facility keyword matching.
 - **5.6** - Multiple Bedrooms autofill support. Detects and removes extra empty bedroom sections. All key waits converted to polling (Create New Room nav, Submit/Save, photo upload preview).
 - **5.51** - Details save reliability fix (re-click after React state settles). Google account auto-selection removed (scope too broad). Traveloka bird favicon for extension icon.
