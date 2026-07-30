@@ -3610,13 +3610,27 @@ document.getElementById('btnKR').addEventListener('click', () => setLang('kr'));
 document.getElementById('btnEN').addEventListener('click', () => setLang('en'));
 checkForUpdates();
 
+const personOtherInput = document.getElementById('personOther');
+const isPresetPerson = name => Array.from(document.querySelectorAll('.person-btn')).some(b => b.dataset.person === name);
+
 document.querySelectorAll('.person-btn').forEach(btn => {
   if (btn.dataset.person === selectedPerson) btn.classList.add('active');
   btn.addEventListener('click', () => {
     selectedPerson = btn.dataset.person;
     localStorage.setItem('teraPerson', selectedPerson);
     document.querySelectorAll('.person-btn').forEach(b => b.classList.toggle('active', b === btn));
+    personOtherInput.value = '';
   });
+});
+
+if (selectedPerson && !isPresetPerson(selectedPerson)) personOtherInput.value = selectedPerson;
+
+personOtherInput.addEventListener('input', () => {
+  const name = personOtherInput.value.trim();
+  if (!name) return;
+  selectedPerson = name;
+  localStorage.setItem('teraPerson', selectedPerson);
+  document.querySelectorAll('.person-btn').forEach(b => b.classList.remove('active'));
 });
 
 // Reset
