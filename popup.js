@@ -365,17 +365,6 @@ const COUNTRY_LOCALE_MAP = {
   philippines: "en-PH", malaysia: "ms-MY", singapore: "en-SG",
 };
 
-// booking.com/Agoda의 JSON-LD addressCountry가 코드가 아니라 나라/지역 이름 그대로 오는 경우가 있어
-// (예: "Macau") voltMap(2자리 코드 기준) 조회 전에 정규화
-const COUNTRY_NAME_TO_VOLT_CODE = {
-  "south korea": "kr", korea: "kr",
-  japan: "jp", china: "cn",
-  "hong kong": "hk", macau: "cn", macao: "cn",
-  indonesia: "id", vietnam: "vn", thailand: "th",
-  philippines: "ph", malaysia: "my", singapore: "sg",
-  taiwan: "tw",
-};
-
 // ── Hotel Facility Map ──
 const HOTEL_FACILITY_MAP = [
   { codes: [102], teraValues: ["WIFI_PUBLIC_AREA", "WIFI_FREE"] },
@@ -465,7 +454,7 @@ const HOTEL_FACILITY_MAP = [
   { keywords: ["wedding"], teraValues: ["WEDDING_SERVICE"] },
   { keywords: ["business center", "business centre"], teraValues: ["BUSINESS_CENTER"] },
   { keywords: ["concierge"], teraValues: ["CONCIERGE"] },
-  { keywords: ["safety deposit", "safe deposit", "in-room safe", "safety box"], teraValues: ["SAFETY_DEPOSIT_BOX"] },
+  { keywords: ["safety deposit", "safe deposit", "in-room safe", "safety box", "safe"], teraValues: ["SAFETY_DEPOSIT_BOX"] },
   { keywords: ["porter service", "bellboy", "bellhop", "bellman"], teraValues: ["PORTER", "BELLBOY_SERVICE"] },
   { keywords: ["luggage storage", "baggage storage"], teraValues: ["LUGGAGE_STORAGE"] },
   { keywords: ["24-hour front desk", "24 hour front desk", "front desk 24", "reception 24"], teraValues: ["FRONT_DESK", "HAS_24_HOUR_FRONT_DESK"] },
@@ -489,7 +478,7 @@ const HOTEL_FACILITY_MAP = [
   { keywords: ["bowling"], teraValues: ["BOWLING_ALLEY"] },
   { keywords: ["karaoke"], teraValues: ["KARAOKE"] },
   { keywords: ["casino"], teraValues: ["CASINO"] },
-  { keywords: ["laundry service", "laundromat", "dry cleaning"], teraValues: ["LAUNDRY_SERVICE"] },
+  { keywords: ["laundry service", "laundromat", "dry cleaning", "laundry"], teraValues: ["LAUNDRY_SERVICE"] },
   { keywords: ["babysitting", "childcare", "child care"], teraValues: ["BABYSITTING", "SUPERVISED_CHILDCARE"] },
   { keywords: ["children's play area", "children play area", "kids play area", "playground"], teraValues: ["CHILDREN_PLAY_AREA"] },
   { keywords: ["kids club", "children's club", "children club"], teraValues: ["CHILDREN_CLUB"] },
@@ -1170,10 +1159,69 @@ function parseAirbnbRooms(data) {
   return [];
 }
 
+// Airbnb는 호텔처럼 방 여러 개가 아니라 리스팅 1개 = 방 1개라서, 리스팅 전체를 방 1개로 취급해서 스캔
 async function scanAirbnbTab(tabId) {
-  // TODO: 리스팅 DOM 스캔 또는 window.__teraAirbnbRooms 활용해 구현
-  setStatus(currentLang === 'kr' ? 'Airbnb 스캔 기능은 아직 구현되지 않았습니다.' : 'Airbnb scan is not implemented yet.', 'error');
-  return null;
+  const res = await exec(tabId, () => {
+    const raw = document.getElementById('data-deferred-state-0')?.textContent
+      || document.querySelector('script[id^="data-deferred-state"]')?.textContent;
+    let pdp = null, node = null;
+    try {
+      const stateJson = JSON.parse(raw || '{}');
+      for (const [, resp] of (stateJson.niobeClientData || [])) {
+        const p = resp?.data?.presentation?.stayProductDetailPage;
+        if (p) pdp = p;
+        const n = resp?.data?.node;
+        if (n?.pdpPresentation) node = n;
+      }
+    } catch (e) {}
+
+    let ld = null;
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      try {
+        const json = JSON.parse(s.textContent);
+        const candidates = Array.isArray(json) ? json : [json];
+        const found = candidates.find(j => /vacationrental/i.test(j['@type'] || ''));
+        if (found) { ld = found; break; }
+      } catch (e) {}
+    }
+
+    const title = ld?.name || document.querySelector('h1')?.innerText?.trim() || '';
+    const sections = pdp?.sections?.sections || [];
+    const photoModal = sections.find(s => s?.sectionId === 'PHOTO_TOUR_SCROLLABLE_MODAL')?.section;
+    const mediaItems = photoModal?.mediaItems || [];
+    const roomPhotos = [...new Set(mediaItems.map(m => m.baseUrl).filter(Boolean))];
+
+    const personCapacity = node?.pdpPresentation?.personCapacity || null;
+    const sizeM = title.match(/(\d+(?:\.\d+)?)\s*(?:㎡|m²|sqm)/i);
+
+    return {
+      hotelName: title,
+      roomName: title,
+      sizeText: sizeM ? sizeM[1] : '',
+      maxAdults: personCapacity || 2,
+      roomPhotos,
+    };
+  }, [], "MAIN");
+
+  const data = res?.[0]?.result;
+  if (!data?.roomPhotos?.length) {
+    setStatus(currentLang === 'kr' ? 'Airbnb 페이지를 새로고침 후 다시 스캔해주세요.' : 'Please reload the Airbnb page and scan again.', 'error');
+    return null;
+  }
+
+  const room = {
+    roomName: data.roomName || '',
+    bedText: '',
+    sizeText: data.sizeText,
+    roomPhotos: data.roomPhotos,
+    country: '',
+    priceText: '',
+    occupancy: data.maxAdults + ' adults',
+    maxAdults: data.maxAdults,
+    extraBedDesc: '',
+  };
+
+  return { hotelName: data.hotelName, rooms: [room], hotelPhotos: [] };
 }
 
 // ── Room Scan ──
@@ -2547,7 +2595,11 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     if (isBookingExtract) {
       const bookingRes = await exec(tab.id, (personName) => {
         const HOTEL_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-8HSlpjcpIKqNtpjt2GwJlNFtBoeBOrX7ubNMBsvVDU7p2nDEuZUHAL-98jHn7cpq8A/exec";
-        const text = document.body?.innerText || "";
+        // "Guests are asking" FAQ 위젯은 실제 보유 여부와 무관하게 모든 호텔에 같은 질문 템플릿("Is there an airport shuttle service?" 등)을
+        // 보여줘서 아래 키워드 매칭에 오탐을 일으키므로 검사 대상 텍스트에서 제외
+        const rawText = document.body?.innerText || "";
+        const faqText = document.querySelector('[data-testid="ask-questions-entry-desktop-wrapper"]')?.innerText || "";
+        const text = faqText ? rawText.split(faqText).join(" ") : rawText;
         const hotelName = document.querySelector('#hp_hotel_name')?.innerText?.trim()
           || document.querySelector('h2[data-testid="header-title"]')?.innerText?.trim()
           || document.querySelector('h1')?.innerText?.trim() || '';
@@ -2993,11 +3045,27 @@ const agodaExtractForDetail = async () => {
             address = a;
           } else {
             const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
-            address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+            const parts = [a.addressRegion, a.addressLocality, street].filter(Boolean);
+            const seenParts = [];
+            address = parts.filter(p => {
+              const n = p.replace(/\s+/g, ' ').trim();
+              if (seenParts.some(s2 => s2 === n || s2.includes(n) || n.includes(s2))) return false;
+              seenParts.push(n);
+              return true;
+            }).join(', ');
             postalCode = a.postalCode || '';
             const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
             countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
-            countryCode = COUNTRY_NAME_TO_VOLT_CODE[countryCode] || countryCode;
+            // 이 함수는 chrome.scripting.executeScript로 페이지에 주입되어 popup.js 바깥 변수(클로저)에 접근 못 하므로 맵을 직접 인라인
+            const countryNameToVoltCode = {
+              "south korea": "kr", korea: "kr",
+              japan: "jp", china: "cn",
+              "hong kong": "hk", macau: "cn", macao: "cn",
+              indonesia: "id", vietnam: "vn", thailand: "th",
+              philippines: "ph", malaysia: "my", singapore: "sg",
+              taiwan: "tw",
+            };
+            countryCode = countryNameToVoltCode[countryCode] || countryCode;
           }
         }
         break;
@@ -3090,7 +3158,13 @@ const agodaExtractForDetail = async () => {
 
 // ── booking.com Hotel Detail Extract (runs in page MAIN world) ──
 const bookingExtractForDetail = async () => {
-  const text = document.body?.innerText || '';
+  // "Guests are asking" FAQ 위젯은 실제 보유 여부와 무관하게 모든 호텔에 같은 질문 템플릿을 보여줘서
+  // 아래 키워드 매칭(airport transfer 등)에 오탐을 일으키므로 검사 대상 텍스트에서 제외.
+  // 위젯 셀렉터가 안 걸리는 경우를 대비해 "Is there ...?" 류의 질문 문장도 통째로 한번 더 제거
+  const rawText = document.body?.innerText || '';
+  const faqText = document.querySelector('[data-testid="ask-questions-entry-desktop-wrapper"]')?.innerText || '';
+  const text = (faqText ? rawText.split(faqText).join(' ') : rawText)
+    .replace(/(?:Is there|Are there|Do you have|Does (?:the|this) (?:hotel|property|place))[^?\n]{0,120}\?/gi, ' ');
   const data = {};
 
   data.name_en = document.querySelector('#hp_hotel_name')?.innerText?.trim()
@@ -3112,11 +3186,27 @@ const bookingExtractForDetail = async () => {
             address = a;
           } else {
             const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
-            address = [a.addressRegion, a.addressLocality, street].filter(Boolean).join(', ');
+            const parts = [a.addressRegion, a.addressLocality, street].filter(Boolean);
+            const seenParts = [];
+            address = parts.filter(p => {
+              const n = p.replace(/\s+/g, ' ').trim();
+              if (seenParts.some(s2 => s2 === n || s2.includes(n) || n.includes(s2))) return false;
+              seenParts.push(n);
+              return true;
+            }).join(', ');
             postalCode = a.postalCode || '';
             const rawCountry = typeof a.addressCountry === 'string' ? a.addressCountry : (a.addressCountry?.['@id'] || '');
             countryCode = rawCountry.toLowerCase().replace(/^https?:\/\/.*\//, '');
-            countryCode = COUNTRY_NAME_TO_VOLT_CODE[countryCode] || countryCode;
+            // 이 함수는 chrome.scripting.executeScript로 페이지에 주입되어 popup.js 바깥 변수(클로저)에 접근 못 하므로 맵을 직접 인라인
+            const countryNameToVoltCode = {
+              "south korea": "kr", korea: "kr",
+              japan: "jp", china: "cn",
+              "hong kong": "hk", macau: "cn", macao: "cn",
+              indonesia: "id", vietnam: "vn", thailand: "th",
+              philippines: "ph", malaysia: "my", singapore: "sg",
+              taiwan: "tw",
+            };
+            countryCode = countryNameToVoltCode[countryCode] || countryCode;
           }
         }
         break;
@@ -3129,6 +3219,48 @@ const bookingExtractForDetail = async () => {
   }
   data.address = address;
   data.postal_code = postalCode;
+
+  // 한국어 이름/주소: booking.com이 제공하는 hreflang=ko 대체 페이지를 불러와서 다시 추출
+  // ("Address in Local Language" 필드가 실제로는 영문/로마자 주소로 채워지고 있었음)
+  try {
+    const koLink = document.querySelector('link[rel="alternate"][hreflang="ko"]')?.href;
+    if (koLink) {
+      const koHtml = await (await fetch(koLink)).text();
+      const koDoc = new DOMParser().parseFromString(koHtml, 'text/html');
+      const koName = koDoc.querySelector('#hp_hotel_name')?.textContent?.trim()
+        || koDoc.querySelector('h2[data-testid="header-title"]')?.textContent?.trim()
+        || koDoc.querySelector('h1')?.textContent?.trim() || '';
+      if (koName && koName !== data.name_en) data.name_local = koName;
+
+      let koAddress = '';
+      for (const s of koDoc.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const json = JSON.parse(s.textContent);
+          const candidates = json['@graph'] || (Array.isArray(json) ? json : [json]);
+          const hotel = candidates.find(j => /hotel|lodging/i.test(j['@type'] || ''));
+          const a = hotel?.address;
+          if (a && typeof a !== 'string') {
+            const street = (a.streetAddress || '').replace(/\s*\(.*?\)/g, '').trim();
+            // 한국어 데이터는 addressRegion/streetAddress가 겹치거나 서로 포함관계인 경우가 있어 정규화 후 제거
+            const parts = [a.addressRegion, a.addressLocality, street].filter(Boolean);
+            const seenParts = [];
+            koAddress = parts.filter(p => {
+              const n = p.replace(/\s+/g, ' ').trim();
+              if (seenParts.some(s2 => s2 === n || s2.includes(n) || n.includes(s2))) return false;
+              seenParts.push(n);
+              return true;
+            }).join(', ');
+          }
+          if (hotel) break;
+        } catch (e) {}
+      }
+      if (!koAddress) {
+        const koAddrEl = koDoc.querySelector('[data-testid="address"], .hp_address_subtitle');
+        koAddress = (koAddrEl?.textContent?.trim() || '').replace(/\n/g, ', ');
+      }
+      if (koAddress && /[가-힣]/.test(koAddress)) data.address = koAddress;
+    }
+  } catch (e) {}
 
   // booking.com은 "Check-in / From 2:00 PM"처럼 12시간제(AM/PM)를 쓰는 경우가 많아 24시간제로 변환
   const to24h = (hhmm, ampm) => {
@@ -3212,10 +3344,121 @@ const bookingExtractForDetail = async () => {
   return data;
 };
 
-// ── Airbnb Hotel Detail Extract (TODO: 실제 페이지 구조 확인 후 구현, runs in page MAIN world) ──
+// ── Airbnb Hotel Detail Extract (runs in page MAIN world) ──
 const airbnbExtractForDetail = async () => {
-  // TODO: 리스팅 정보, 체크인/아웃, 편의시설 등 실제 추출 로직 구현
-  return null;
+  const data = {};
+
+  // JSON-LD (schema.org VacationRental) — 이름/주소(도시)/국가
+  let ld = null;
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const json = JSON.parse(s.textContent);
+      const candidates = Array.isArray(json) ? json : [json];
+      const found = candidates.find(j => /vacationrental/i.test(j['@type'] || ''));
+      if (found) { ld = found; break; }
+    } catch (e) {}
+  }
+
+  data.name_en = ld?.name || document.querySelector('h1')?.innerText?.trim() || '';
+  data.name_local = '';
+  data.address = ld?.address?.addressLocality || '';
+
+  // 실제 편의시설/체크인아웃/사진 정보는 data-deferred-state-0 안의 GraphQL 응답(niobeClientData)에서 파싱
+  // (페이지 텍스트 정규식보다 훨씬 정확 — 이미 구조화된 amenity available 여부, house rules 항목을 그대로 사용)
+  let policies = null, amenityGroups = [], mediaItems = [];
+  try {
+    const raw = document.getElementById('data-deferred-state-0')?.textContent
+      || document.querySelector('script[id^="data-deferred-state"]')?.textContent;
+    if (raw) {
+      const stateJson = JSON.parse(raw);
+      let pdp = null, node = null;
+      for (const [, resp] of (stateJson.niobeClientData || [])) {
+        const p = resp?.data?.presentation?.stayProductDetailPage;
+        if (p) pdp = p;
+        const n = resp?.data?.node;
+        if (n?.pdpPresentation) node = n;
+      }
+      const sections = pdp?.sections?.sections || [];
+      policies = sections.find(s => s?.sectionId === 'POLICIES_DEFAULT')?.section || null;
+      const photoModal = sections.find(s => s?.sectionId === 'PHOTO_TOUR_SCROLLABLE_MODAL')?.section;
+      mediaItems = photoModal?.mediaItems || [];
+      amenityGroups = node?.pdpPresentation?.amenities?.seeAllAmenitiesGroups || [];
+    }
+  } catch (e) {}
+
+  // Check-in/out: house rules 항목이 "Check-in after 4:00 PM" / "Checkout before 10:00 AM" 형태로 나옴
+  const houseRuleTitles = (policies?.houseRules || []).map(r => r.title || '').join(' | ');
+  const to24h = (hhmm, ampm) => {
+    let [h, mi] = hhmm.split(':').map(Number);
+    if (/pm/i.test(ampm || '') && h !== 12) h += 12;
+    if (/am/i.test(ampm || '') && h === 12) h = 0;
+    return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+  };
+  const cinM = houseRuleTitles.match(/Check-?in[^0-9]*(\d{1,2}:\d{2})\s*(AM|PM)?/i);
+  const coutM = houseRuleTitles.match(/Check-?out[^0-9]*(\d{1,2}:\d{2})\s*(AM|PM)?/i);
+  data.front_desk_hours = 'No';
+  data.checkin_time = cinM ? to24h(cinM[1], cinM[2]) : '';
+  data.checkin_end = '23:59';
+  data.checkout_start = '00:00';
+  data.checkout_time = coutM ? to24h(coutM[1], coutM[2]) : '';
+
+  // Airbnb는 호텔 건축/객실수 개념이 없어 공란 유지 (수동 입력)
+  data.built_year = '';
+  data.renovated_year = '';
+  data.room_count = '';
+  data.floor_count = '';
+  data.restaurant_count = '';
+  data.bar_count = '';
+  data.room_service = 'No';
+  data.breakfast_price = '';
+
+  // Voltage: JSON-LD에 국가가 없는 경우가 많아 페이지 텍스트에서 국가명을 찾아 매핑 (다른 사이트와 동일한 방식)
+  const countryNameToVoltCode = {
+    "south korea": "kr", korea: "kr",
+    japan: "jp", china: "cn",
+    "hong kong": "hk", macau: "cn", macao: "cn",
+    indonesia: "id", vietnam: "vn", thailand: "th",
+    philippines: "ph", malaysia: "my", singapore: "sg",
+    taiwan: "tw",
+  };
+  const voltMap = { kr: '220V', jp: '100V', cn: '220V', hk: '220V', id: '220V', vn: '220V', th: '220V', ph: '220V', my: '240V', sg: '230V', tw: '110V' };
+  const bodyText = document.body?.innerText || '';
+  let countryCode = (ld?.address?.addressCountry || '').toLowerCase();
+  countryCode = countryNameToVoltCode[countryCode] || countryCode;
+  if (!countryCode) {
+    for (const name of Object.keys(countryNameToVoltCode)) {
+      if (bodyText.toLowerCase().includes(name)) { countryCode = countryNameToVoltCode[name]; break; }
+    }
+  }
+  data.voltage = voltMap[countryCode] || '';
+
+  // Amenities: available === true 항목만 모아 기존 HOTEL_FACILITY_MAP 키워드 매칭에 재사용
+  const availableTitles = amenityGroups
+    .flatMap(g => g.amenities || [])
+    .filter(a => a.available)
+    .map(a => a.title)
+    .join(', ');
+
+  if (/free parking/i.test(availableTitles)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else if (/paid parking/i.test(availableTitles)) {
+    data.parking = 'Yes'; data.parking_type = 'Paid';
+  } else if (/\bparking\b/i.test(availableTitles)) {
+    data.parking = 'Yes'; data.parking_type = 'Free';
+  } else {
+    data.parking = 'No'; data.parking_type = '-';
+  }
+  data.parking_price = '-';
+
+  data.airport_transfer = /airport\s*(?:pickup|shuttle|transfer)/i.test(availableTitles) ? 'Yes' : 'No';
+  data.airport_transfer_fee = '-';
+
+  data._tripFacilities = [{ desc: availableTitles }];
+
+  // Photos: mediaItems[].baseUrl이 이미 원본 해상도라 별도 hi-res 변환 불필요
+  data._airbnbPhotos = [...new Set(mediaItems.map(m => m.baseUrl).filter(Boolean))];
+
+  return data;
 };
 
 // Hotel Detail Insert (Tera Autofill)
@@ -3305,9 +3548,29 @@ document.getElementById("sheetBtn").addEventListener("click", async () => {
     return;
   }
 
-  // 지금 탭이 Airbnb이면: TODO - 실제 추출 로직 구현 전까지는 미구현 안내만 표시
+  // 지금 탭이 Airbnb이면: 추출 → currentHotelData 갱신 → Tera 탭으로 이동
   if (tab.url?.includes("airbnb.com")) {
-    setExtractStatus(currentLang === 'kr' ? 'Airbnb Hotel Detail Insert는 아직 구현되지 않았습니다.' : 'Airbnb Hotel Detail Insert is not implemented yet.', "error");
+    btn.disabled = true;
+    setExtractStatus(t().extracting);
+    try {
+      const results = await exec(tab.id, airbnbExtractForDetail, [], "MAIN");
+      const data = results?.[0]?.result;
+      if (!data?.name_en) { setExtractStatus(t().extractFail, "error"); return; }
+      currentHotelData = data;
+      renderHotelPreview(data);
+      setExtractStatus(t().extractDone(data.name_en), "success");
+      await openOrFocusTab("https://tera.traveloka.com/data/hotel-data/*", TERA_HOTEL_DATA_URL);
+      setExtractStatus(
+        currentLang === 'kr'
+          ? `${data.name_en} - 버튼을 한 번 더 눌러서 시작해 주세요.`
+          : `${data.name_en} - Click one more time to begin.`,
+        "success"
+      );
+    } catch (e) {
+      setExtractStatus("Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
     return;
   }
 
