@@ -42,8 +42,8 @@
       if (!clicked) await sleep(300);
     }
 
-    if (!clicked) toast('⚠️ 직접 로그인하고 Continue 눌러요');
+    if (!clicked) toast('⚠️ 직접 로그인하신 후 Continue를 눌러주세요');
   } catch {
-    toast('⚠️ 직접 로그인하고 Continue 눌러요');
+    toast('⚠️ 직접 로그인하신 후 Continue를 눌러주세요');
   }
 })();

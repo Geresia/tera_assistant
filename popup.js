@@ -589,8 +589,8 @@ function waitForContinue(roomName, isError = false) {
     const msgEl = document.getElementById('pauseMsg');
     const btn = document.getElementById('continueBtn');
     msgEl.textContent = isError
-      ? (currentLang === 'kr' ? `${roomName} - 에러가 있습니다. 수정 후 continue을 눌러주세요.` : `${roomName} - Error detected. Fix it, then click Continue.`)
-      : (currentLang === 'kr' ? `${roomName} 더블 체크 후 continue을 눌러주세요.` : `${roomName} Double check, then click Continue.`);
+      ? (currentLang === 'kr' ? `${roomName} - 에러가 있습니다. 수정 후 continue를 눌러주세요.` : `${roomName} - Error detected. Fix it, then click Continue.`)
+      : (currentLang === 'kr' ? `${roomName} 더블 체크 후 continue를 눌러주세요.` : `${roomName} Double check, then click Continue.`);
     msgEl.style.color = isError ? '#d93025' : '';
     box.style.display = 'block';
     btn.textContent = currentLang === 'kr' ? '완료' : 'Continue';

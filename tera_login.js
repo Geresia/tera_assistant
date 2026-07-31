@@ -30,7 +30,7 @@
       if (userEl) break;
       await sleep(300);
     }
-    if (!userEl) { toast('⚠️ 직접 로그인하고 Continue 눌러요'); return; }
+    if (!userEl) { toast('⚠️ 직접 로그인하신 후 Continue를 눌러주세요'); return; }
 
     await sleep(400);
 
@@ -70,8 +70,8 @@
 
     if (contBtn) { contBtn.click(); return; }
 
-    toast('⚠️ 직접 로그인하고 Continue 눌러요');
+    toast('⚠️ 직접 로그인하신 후 Continue를 눌러주세요');
   } catch {
-    toast('⚠️ 직접 로그인하고 Continue 눌러요');
+    toast('⚠️ 직접 로그인하신 후 Continue를 눌러주세요');
   }
 })();
